@@ -4412,9 +4412,10 @@ import {
     rememberSource(parsed, shapes, replaceSource);
     shapes.forEach((shape) => delete shape.sourceKey);
     importCanvasSize(parsed.source, replaceStarter);
-    if (replaceStarter) {
-      state.doc.shapes = [];
-      if (state.doc.name === t('doc.untitled')) state.doc.name = base;
+    if (replaceStarter) state.doc.shapes = [];
+    if (state.doc.name === t('doc.untitled')) {
+      if (parsed.title) state.doc.name = parsed.title;
+      else if (replaceStarter) state.doc.name = base;
     }
     state.doc.shapes.push(...shapes);
     state.sourceByDoc.set(before, previousSource);

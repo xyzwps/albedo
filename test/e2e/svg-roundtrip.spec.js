@@ -432,3 +432,26 @@ test('[SVG-023] a file with no editable shapes is rejected without touching the 
   expect((await doc(page)).shapes).toHaveLength(0);
   await expect(page.locator('#toast')).toContainText('no importable shapes');
 });
+
+test('[SVG-024] a root title becomes the canvas name', async ({ page }) => {
+  const source = svg('<title>My Icon</title><rect id="box" x="10" y="10" width="20" height="20" fill="#ff0000"/>');
+  await importSvg(page, source, 'title.svg');
+  await waitForShapes(page, 1);
+
+  expect((await doc(page)).name).toBe('My Icon');
+  await expect(page.locator('#docTitle')).toHaveValue('My Icon');
+  expect(await exportSvg(page)).toContain('<title>My Icon</title>');
+});
+
+test('[SVG-025] an existing canvas name survives an import', async ({ page }) => {
+  await page.evaluate(() => window.__ALBEDO_TEST__.load({
+    name: 'Working', width: 128, height: 128, background: 'none', shapes: []
+  }));
+  const source = svg('<title>Other</title><rect id="box" x="10" y="10" width="20" height="20" fill="#ff0000"/>');
+  await importSvg(page, source, 'other.svg');
+  await waitForShapes(page, 1);
+
+  expect((await doc(page)).name).toBe('Working');
+  await expect(page.locator('#docTitle')).toHaveValue('Working');
+  expect(await exportSvg(page)).toContain('<title>Working</title>');
+});

@@ -101,3 +101,12 @@
 #### Scenario: SVG-023 只有不可编辑元素时明确说没有图形
 - **WHEN** 导入一个只含 `text`/`image`、没有可编辑图形的 SVG
 - **THEN** 界面提示没有可导入的图形，当前文档不被改写
+
+### Requirement: 导入时带回画布名称
+#### Scenario: SVG-024 文件根 title 成为画布名称
+- **WHEN** 导入一个根节点含 `<title>My Icon</title>` 的 SVG，当前画布仍是未命名
+- **THEN** 画布名称变成 `My Icon`，标题输入框显示它，随后导出仍写回 `<title>My Icon</title>`
+
+#### Scenario: SVG-025 已有名称不被导入覆盖
+- **WHEN** 画布已经命名为 `Working`，导入一个根 title 为 `Other` 的 SVG
+- **THEN** 画布仍叫 `Working`，导出仍然是 `<title>Working</title>`
