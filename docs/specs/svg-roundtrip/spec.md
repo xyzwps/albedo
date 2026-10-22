@@ -110,3 +110,12 @@
 #### Scenario: SVG-025 已有名称不被导入覆盖
 - **WHEN** 画布已经命名为 `Working`，导入一个根 title 为 `Other` 的 SVG
 - **THEN** 画布仍叫 `Working`，导出仍然是 `<title>Working</title>`
+
+### Requirement: 空画布导入时画布跟随源尺寸
+#### Scenario: SVG-026 新建的空画布导入后跟随源 viewBox
+- **WHEN** 新建一个 960×640 的空画布，导入一个 `viewBox="0 0 128 128"` 的 SVG
+- **THEN** 画布变成 128×128，图形按源坐标落位，不需要用户再手动改画布大小
+
+#### Scenario: SVG-027 有内容的画布不被小图缩小
+- **WHEN** 960×640 的画布上已有图形，再导入一个 128×128 的 SVG
+- **THEN** 画布仍是 960×640，新图形按源坐标追加，已有图形不被裁掉或缩小

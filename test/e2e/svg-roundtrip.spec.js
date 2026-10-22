@@ -455,3 +455,28 @@ test('[SVG-025] an existing canvas name survives an import', async ({ page }) =>
   await expect(page.locator('#docTitle')).toHaveValue('Working');
   expect(await exportSvg(page)).toContain('<title>Working</title>');
 });
+
+test('[SVG-026] an empty canvas adopts the imported source size', async ({ page }) => {
+  await page.evaluate(() => window.__ALBEDO_TEST__.load({
+    name: 'blank', width: 960, height: 640, background: 'none', shapes: []
+  }));
+  await importSvg(page, svg('<rect id="box" x="10" y="10" width="20" height="20" fill="#ff0000"/>'));
+  await waitForShapes(page, 1);
+
+  expect({ width: (await doc(page)).width, height: (await doc(page)).height }).toEqual({ width: 128, height: 128 });
+  expect((await doc(page)).shapes[0]).toMatchObject({ x: 10, y: 10, w: 20, h: 20 });
+});
+
+test('[SVG-027] importing a small file does not shrink a canvas with content', async ({ page }) => {
+  await page.evaluate(() => window.__ALBEDO_TEST__.load({
+    name: 'composition', width: 960, height: 640, background: 'none', shapes: [{
+      id: 'existing', type: 'rect', name: 'existing', x: 100, y: 100, w: 200, h: 200,
+      rx: 0, fill: '#00ff00', stroke: '#1b1d22', strokeWidth: 1, opacity: 1
+    }]
+  }));
+  await importSvg(page, svg('<rect id="box" x="10" y="10" width="20" height="20" fill="#ff0000"/>'));
+  await waitForShapes(page, 2);
+
+  expect({ width: (await doc(page)).width, height: (await doc(page)).height }).toEqual({ width: 960, height: 640 });
+  expect((await doc(page)).shapes[0]).toMatchObject({ id: 'existing', x: 100, y: 100, w: 200, h: 200 });
+});
