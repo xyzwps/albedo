@@ -1,0 +1,11 @@
+.DS_Store
+
+# Generated single-file distribution
+svg-editor.html
+editor.bundle.js
+
+# Dependencies / test output
+node_modules/
+test-results/
+playwright-report/
+coverage/

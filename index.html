@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Albedo — SVG Studio</title>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand" aria-label="Albedo SVG Studio">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>
+          <span class="brand-name">Albedo</span>
+          <span class="brand-sub">SVG STUDIO / 01</span>
+        </span>
+      </div>
+
+      <div class="doc-block">
+        <input id="docTitle" class="doc-title" value="Untitled Canvas" data-i18n-aria="doc.nameAria" maxlength="60">
+        <span id="saveState" class="save-state" data-i18n="save.saved">Saved</span>
+      </div>
+
+      <div class="top-actions">
+        <select id="langSelect" class="lang-select" data-i18n-aria="lang.label" aria-label="Language">
+          <option value="auto" data-i18n="lang.auto">Auto</option>
+          <option value="zh">简体中文</option>
+          <option value="en">English</option>
+        </select>
+        <button id="undoBtn" class="tb-btn icon-only" data-i18n-title="action.undoTitle" data-i18n-aria="action.undo" title="Undo (⌘Z)" aria-label="Undo">↺</button>
+        <button id="redoBtn" class="tb-btn icon-only" data-i18n-title="action.redoTitle" data-i18n-aria="action.redo" title="Redo (⇧⌘Z)" aria-label="Redo">↻</button>
+        <span class="sep"></span>
+        <button id="newBtn" class="tb-btn" data-i18n-title="action.newTitle" title="New blank canvas" data-i18n="action.new">New</button>
+        <button id="importSvgBtn" class="tb-btn" data-i18n-title="action.importSvgTitle" title="Import SVG file" data-i18n="action.importSvg">Import SVG</button>
+        <button id="copyBtn" class="tb-btn" data-i18n-title="action.copySvgTitle" title="Copy SVG code" data-i18n="action.copySvg">Copy SVG</button>
+        <button id="exportBtn" class="tb-btn primary" data-i18n-title="action.exportSvgTitle" title="Export SVG file">
+          <span data-i18n="action.exportSvg">Export SVG</span> <span aria-hidden="true">↗</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="left-panel">
+        <nav class="panel-rail left-rail" id="leftRail" role="tablist" aria-orientation="vertical" aria-label="Panel tabs" data-i18n-aria="nav.railLabel">
+          <button type="button" class="rail-btn" id="leftTabInsert" role="tab" aria-controls="leftPanelInsert" aria-selected="true" tabindex="0" data-rail-go="insert" title="Insert shape" data-i18n-title="nav.insert" aria-label="Insert shape" data-i18n-aria="nav.insert">
+            <svg class="rail-icon" viewBox="0 0 128 128" width="128" height="128" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M64 28v72M28 64h72"/></svg>
+          </button>
+          <button type="button" class="rail-btn" id="leftTabGuides" role="tab" aria-controls="leftPanelGuides" aria-selected="false" tabindex="-1" data-rail-go="guides" title="Guides" data-i18n-title="nav.guides" aria-label="Guides" data-i18n-aria="nav.guides">
+            <svg class="rail-icon" viewBox="0 0 128 128" width="128" height="128" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M30 30h68v68H30z"/><path d="M64 30v68M30 64h68"/></svg>
+          </button>
+          <button type="button" class="rail-btn" id="leftTabLayers" role="tab" aria-controls="leftPanelLayers" aria-selected="false" tabindex="-1" data-rail-go="layers" title="Layers" data-i18n-title="nav.layers" aria-label="Layers" data-i18n-aria="nav.layers">
+            <svg class="rail-icon" viewBox="0 0 128 128" width="128" height="128" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M64 20 16 44l48 24 48-24-48-24Z"/><path d="M16 64l48 24 48-24"/><path d="M16 84l48 24 48-24"/></svg>
+          </button>
+        </nav>
+        <div class="panel-main" id="leftPanelBody">
+          <section class="panel-section" id="leftPanelInsert" role="tabpanel" aria-labelledby="leftTabInsert" data-rail-section="insert">
+            <h2 class="section-title"><span class="section-label" data-i18n="insert.title">Insert shape</span> <span>INSERT</span></h2>
+            <div class="shape-grid">
+              <button class="shape-btn" data-add="rect" title="Add rectangle (R)">
+                <span class="shape-preview preview-rect"></span>
+                <span class="shape-meta"><span data-i18n="shape.rect">Rectangle</span><kbd>R</kbd></span>
+              </button>
+              <button class="shape-btn" data-add="ellipse" title="Add ellipse (O)">
+                <span class="shape-preview preview-ellipse"></span>
+                <span class="shape-meta"><span data-i18n="shape.ellipse">Ellipse</span><kbd>O</kbd></span>
+              </button>
+              <button class="shape-btn" data-add="circle" title="Add circle (C)">
+                <svg class="shape-preview" viewBox="0 0 30 26" aria-hidden="true">
+                  <circle cx="15" cy="13" r="10.5" fill="none" stroke="#2c3138" stroke-width="1.7"></circle>
+                </svg>
+                <span class="shape-meta"><span data-i18n="shape.circle">Circle</span><kbd>C</kbd></span>
+              </button>
+              <button class="shape-btn" data-add="polygon" title="Add polygon (G)">
+                <svg class="shape-preview" viewBox="0 0 30 26" aria-hidden="true">
+                  <polygon points="15,2.5 27,10.5 22.5,24 7.5,24 3,10.5" fill="none" stroke="#2c3138" stroke-width="1.7" stroke-linejoin="round"></polygon>
+                </svg>
+                <span class="shape-meta"><span data-i18n="shape.polygon">Polygon</span><kbd>G</kbd></span>
+              </button>
+              <button class="shape-btn" data-add="line" title="Add line (L)">
+                <span class="shape-preview preview-line"></span>
+                <span class="shape-meta"><span data-i18n="shape.line">Line</span><kbd>L</kbd></span>
+              </button>
+              <button class="shape-btn" data-add="text" title="Add text (T)">
+                <span class="shape-preview preview-text">A</span>
+                <span class="shape-meta"><span data-i18n="shape.text">Text</span><kbd>T</kbd></span>
+              </button>
+              <button class="shape-btn" data-add="path" title="Add path (P)">
+                <span class="shape-preview preview-path"></span>
+                <span class="shape-meta"><span data-i18n="shape.path">Path</span><kbd>P</kbd></span>
+              </button>
+            </div>
+            <button type="button" id="insertSvgBtn" class="import-svg" data-i18n-title="insert.importSvgTitle" title="Import an SVG file as editable shapes">
+              <span class="import-svg-icon" aria-hidden="true">
+                <svg viewBox="0 0 128 128" width="128" height="128" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M64 86V24"/><path d="M40 46l24-24 24 24"/><path d="M24 78v22c0 7 5 12 12 12h56c7 0 12-5 12-12V78"/></svg>
+              </span>
+              <span class="import-svg-copy">
+                <b data-i18n="insert.importSvg">Import SVG</b>
+                <em data-i18n="insert.importSvgHint">Vector shapes · editable</em>
+              </span>
+            </button>
+            <p class="tool-note" data-i18n="insert.note">Select a shape to edit. Paths use a command stack.</p>
+          </section>
+
+          <section class="panel-section assist-section" id="leftPanelGuides" role="tabpanel" aria-labelledby="leftTabGuides" data-rail-section="guides" hidden>
+            <h2 class="section-title"><span class="section-label" data-i18n="assist.title">Guides</span> <span>GUIDES</span></h2>
+            <div class="assist-row">
+              <label class="assist-check"><input type="checkbox" id="gridToggle"> <span data-i18n="assist.grid">Grid</span></label>
+              <select id="gridSize" class="assist-select" data-i18n-aria="assist.gridSize" aria-label="Grid size">
+                <option value="1">1 px</option>
+                <option value="2">2 px</option>
+                <option value="4">4 px</option>
+                <option value="8" selected>8 px</option>
+                <option value="16">16 px</option>
+                <option value="32">32 px</option>
+              </select>
+            </div>
+            <div class="assist-row">
+              <label class="assist-check"><input type="checkbox" id="snapToggle" checked> <span data-i18n="assist.snap">Snap</span></label>
+              <span class="assist-hint" data-i18n="assist.altHint">Alt to bypass</span>
+            </div>
+            <p class="assist-note" data-i18n="assist.note">Snap to grid, edges, and centers.</p>
+
+            <h3 class="section-title underlay-title"><span class="section-label" data-i18n="underlay.title">Reference</span> <span>REFERENCE</span></h3>
+            <div id="underlayEmpty" class="underlay-empty">
+              <button type="button" id="underlayImportBtn" class="underlay-import" data-i18n-title="underlay.importTitle" title="Import an image as a tracing reference">
+                <span class="underlay-plus">＋</span>
+                <span>
+                  <b data-i18n="underlay.import">Import reference</b>
+                  <em data-i18n="underlay.importHint">Click to choose, or drop it on the canvas</em>
+                </span>
+              </button>
+            </div>
+            <div id="underlayControls" class="underlay-controls" hidden>
+              <div class="underlay-file">
+                <img id="underlayThumb" class="underlay-thumb" alt="">
+                <div class="underlay-file-meta">
+                  <b id="underlayName">Reference image</b>
+                  <span id="underlayMeta">0 × 0</span>
+                </div>
+                <button type="button" id="underlayRemoveBtn" class="underlay-remove" data-i18n-title="underlay.remove" data-i18n-aria="underlay.remove" title="Remove reference" aria-label="Remove reference">✕</button>
+              </div>
+              <div class="underlay-row">
+                <button type="button" id="underlayVisibleBtn" class="underlay-btn" data-i18n="underlay.visible">Visible</button>
+                <button type="button" id="underlayAdjustBtn" class="underlay-btn" data-i18n="underlay.adjust">Adjust</button>
+                <button type="button" id="underlayReplaceBtn" class="underlay-btn" data-i18n="underlay.replace">Replace</button>
+              </div>
+              <p id="underlayHint" class="underlay-hint" hidden data-i18n="underlay.hint">Drag to move; drag a corner to scale proportionally.</p>
+            </div>
+            <input type="file" id="underlayFile" accept="image/*" hidden>
+          </section>
+
+          <section class="panel-section grow" id="leftPanelLayers" role="tabpanel" aria-labelledby="leftTabLayers" data-rail-section="layers" hidden>
+            <h2 class="section-title"><span class="section-label" data-i18n="layers.title">Layers</span> <span id="layerCount">0</span></h2>
+            <div id="layers" class="layer-list" data-i18n-aria="layers.aria" aria-label="Layer list"></div>
+          </section>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <div class="stage-head">
+          <div class="breadcrumb"><span class="live-dot"></span><b data-i18n="canvas.label">Canvas</b><span class="slash">/</span><span id="crumbTitle">Untitled Canvas</span></div>
+          <div class="stage-meta">
+            <div class="zoom-controls">
+              <button type="button" id="zoomOutBtn" class="zoom-btn" data-i18n-title="canvas.zoomOut" title="Zoom out">&minus;</button>
+              <button type="button" id="zoomFitBtn" class="zoom-btn zoom-label-btn" data-i18n-title="canvas.zoomReset" title="Reset zoom to 100%"><span id="zoomLabel">100%</span></button>
+              <button type="button" id="zoomInBtn" class="zoom-btn" data-i18n-title="canvas.zoomIn" title="Zoom in">+</button>
+            </div>
+            <button type="button" id="canvasSizeBtn" class="meta-pill canvas-size-btn" data-i18n-title="canvas.changeSize" title="Change canvas size" aria-haspopup="dialog" aria-controls="canvasModal">
+              <span id="canvasSizeLabel">960 × 640</span>
+              <span class="edit-glyph" aria-hidden="true" data-i18n="action.edit">Edit</span>
+            </button>
+            <span class="meta-pill">SVG 1.1</span>
+          </div>
+        </div>
+
+        <div class="stage-body">
+          <div class="artboard-wrap" id="artboardWrap">
+            <div class="artboard">
+              <svg id="stage" viewBox="0 0 960 640" xmlns="http://www.w3.org/2000/svg" role="application" aria-label="SVG canvas">
+                <defs id="stageDefs"></defs>
+                <rect id="canvasBg" x="0" y="0" width="960" height="640" fill="#fffdf8"></rect>
+                <g id="underlayLayer" pointer-events="none" aria-hidden="true"></g>
+                <g id="gridLayer" pointer-events="none" aria-hidden="true"></g>
+                <g id="shapeLayer"></g>
+                <g id="overlay" pointer-events="none"></g>
+              </svg>
+              <div id="emptyCanvas" class="empty-canvas" aria-hidden="true">
+                <span class="empty-canvas-plus">＋</span>
+                <strong data-i18n="canvas.emptyTitle">Start here</strong>
+                <p data-i18n="canvas.emptyHint">Pick a shape on the left, or press R / O / L / P / T</p>
+              </div>
+            </div>
+            <span class="artboard-corner corner-tl"></span>
+            <span class="artboard-corner corner-tr"></span>
+            <span class="artboard-corner corner-bl"></span>
+            <span class="artboard-corner corner-br"></span>
+            <div id="canvasTip" class="canvas-tip"><span class="tip-dot"></span><span data-i18n="canvas.tip">Drag the orange handles to shape the curve</span></div>
+          </div>
+          <div id="stageDrop" class="stage-drop" aria-hidden="true">
+            <span>＋</span>
+            <b data-i18n="canvas.drop">Drop to import</b>
+            <em>SVG · PNG · JPG · WEBP</em>
+          </div>
+        </div>
+
+        <div class="stage-foot">
+          <span id="coordStatus" class="coord-readout">X 000&nbsp;&nbsp;Y 000</span>
+          <span class="status-sep"></span>
+          <span id="shapeStatus">0 shapes</span>
+          <span class="spacer"></span>
+          <span id="nodeStatus" data-i18n="status.noSelection">No selection</span>
+          <span class="status-sep"></span>
+          <span class="foot-badge">LOCAL AUTOSAVE</span>
+        </div>
+      </main>
+
+      <aside class="right-panel">
+        <div id="inspector" class="inspector-scroll" aria-live="polite"></div>
+        <nav class="panel-rail right-rail" id="inspectorRail" role="tablist" aria-orientation="vertical" aria-label="Inspector tabs" data-i18n-aria="nav.inspectorRailLabel"></nav>
+      </aside>
+    </div>
+  </div>
+
+  <div id="canvasModal" class="modal-root" hidden>
+    <div class="modal-backdrop" data-close-canvas></div>
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="canvasModalTitle">
+      <header class="modal-head">
+        <div>
+          <div class="modal-eyebrow">ARTBOARD · CANVAS</div>
+          <h2 id="canvasModalTitle" data-i18n="modal.title">Canvas size</h2>
+        </div>
+        <button type="button" class="modal-close" data-close-canvas data-i18n-aria="action.close" aria-label="Close">✕</button>
+      </header>
+      <p class="modal-desc" data-i18n="modal.desc">Set the logical SVG canvas size. Existing shapes keep their positions; shrinking crops anything outside the bounds.</p>
+      <div class="size-row">
+        <label class="size-field">
+          <span data-i18n="modal.width">WIDTH</span>
+          <span class="size-input"><input id="canvasWidthInput" type="number" min="64" max="10000" step="1" inputmode="numeric" data-i18n-aria="modal.widthAria" aria-label="Canvas width"><em>px</em></span>
+        </label>
+        <span class="size-times">×</span>
+        <label class="size-field">
+          <span data-i18n="modal.height">HEIGHT</span>
+          <span class="size-input"><input id="canvasHeightInput" type="number" min="64" max="10000" step="1" inputmode="numeric" data-i18n-aria="modal.heightAria" aria-label="Canvas height"><em>px</em></span>
+        </label>
+        <span id="canvasRatioChip" class="ratio-chip">3 : 2</span>
+      </div>
+      <div class="preset-head" data-i18n="modal.commonSizes">Common sizes</div>
+      <div class="size-presets">
+        <button type="button" class="size-preset" data-preset="960,640"><b>960 × 640</b><span data-i18n="modal.presetClassic">Classic · 3:2</span></button>
+        <button type="button" class="size-preset" data-preset="1080,1080"><b>1080 × 1080</b><span data-i18n="modal.presetSquare">Square · 1:1</span></button>
+        <button type="button" class="size-preset" data-preset="1200,630"><b>1200 × 630</b><span data-i18n="modal.presetBanner">Banner · 1.9:1</span></button>
+        <button type="button" class="size-preset" data-preset="1920,1080"><b>1920 × 1080</b><span data-i18n="modal.presetWidescreen">Widescreen · 16:9</span></button>
+      </div>
+      <p id="canvasSizeError" class="modal-error" aria-live="polite"></p>
+      <footer class="modal-foot">
+        <button type="button" class="modal-btn" data-close-canvas data-i18n="action.cancel">Cancel</button>
+        <button type="button" id="canvasApplyBtn" class="modal-btn primary" data-i18n="action.applySize">Apply size</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="fontModal" class="modal-root" hidden>
+    <div class="modal-backdrop" data-close-font></div>
+    <section class="modal-panel font-panel" role="dialog" aria-modal="true" aria-labelledby="fontModalTitle">
+      <header class="modal-head">
+        <div>
+          <div class="modal-eyebrow">LOCAL FONTS</div>
+          <h2 id="fontModalTitle" data-i18n="font.title">Choose a local font</h2>
+        </div>
+        <button type="button" class="modal-close" data-close-font data-i18n-aria="action.close" aria-label="Close">✕</button>
+      </header>
+      <p class="modal-desc" data-i18n="font.desc">Fonts are read from this computer; text is converted to outlines on export.</p>
+      <div class="font-search-row"><input id="fontSearch" type="search" autocomplete="off" aria-label="Search fonts" data-i18n-aria="font.searchAria"></div>
+      <div id="fontDenied" class="font-denied" hidden>
+        <p data-i18n="font.denied">No local fonts were readable, which usually means the permission was not granted.</p>
+        <button type="button" id="fontRetryBtn" class="modal-btn" data-i18n="font.retry">Try again</button>
+      </div>
+      <div id="fontList" class="font-list" role="listbox" aria-label="Font list" data-i18n-aria="font.listAria"></div>
+      <p id="fontEmpty" class="font-empty" hidden data-i18n="font.empty">No matching fonts</p>
+      <footer class="modal-foot">
+        <button type="button" class="modal-btn" data-close-font data-i18n="action.cancel">Cancel</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="toast" role="status"></div>
+  <input type="file" id="importSvgFile" accept=".svg,image/svg+xml" hidden>
+
+<script src="editor.bundle.js"></script>
+</body>
+</html>

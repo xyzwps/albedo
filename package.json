@@ -1,0 +1,23 @@
+{
+  "name": "albedo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Albedo SVG studio — a single-file SVG drawing workbench",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node dev.mjs",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "vitest run",
+    "test:e2e": "npm run build && playwright test"
+  },
+  "dependencies": {
+    "opentype.js": "^2.0.0",
+    "paper": "0.14.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "esbuild": "0.28.2",
+    "vitest": "4.1.12"
+  }
+}
