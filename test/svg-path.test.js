@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  invertMatrix,
+  multiplyMatrices,
   parseSvgPath,
   parseTransform,
   primitiveShapeGeometry,
@@ -295,5 +297,25 @@ describe('primitiveShapeGeometry', () => {
   it('drops to null on a singular matrix or unknown tag', () => {
     expect(primitiveShapeGeometry('circle', { cx: 0, cy: 0, r: 5 }, { a: 0, b: 0, c: 0, d: 0, e: 1, f: 1 })).toBeNull();
     expect(primitiveShapeGeometry('polygon', { cx: 0, cy: 0 }, T(0, 0))).toBeNull();
+  });
+});
+
+
+describe('affine inverses', () => {
+  it('inverts a matrix and composes back to identity', () => {
+    const matrix = { a: 2, b: 0.5, c: -1, d: 3, e: 10, f: -4 };
+    const inverse = invertMatrix(matrix);
+    expect(inverse).not.toBeNull();
+    const product = multiplyMatrices(matrix, inverse);
+    expect(product.a).toBeCloseTo(1, 9);
+    expect(product.b).toBeCloseTo(0, 9);
+    expect(product.c).toBeCloseTo(0, 9);
+    expect(product.d).toBeCloseTo(1, 9);
+    expect(product.e).toBeCloseTo(0, 9);
+    expect(product.f).toBeCloseTo(0, 9);
+  });
+
+  it('returns null for a singular matrix', () => {
+    expect(invertMatrix({ a: 0, b: 0, c: 0, d: 0, e: 4, f: 4 })).toBeNull();
   });
 });

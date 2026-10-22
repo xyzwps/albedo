@@ -589,7 +589,7 @@ test('importing arcs through an affine transform keeps ellipse geometry', async 
   await expect.poll(async () => (await doc(page)).shapes.length).toBe(1);
   const commands = (await doc(page)).shapes[0].commands;
   expect(commands.map((command) => command.type)).toEqual(['M', 'A', 'A', 'Z']);
-  expect(commands[1]).toMatchObject({ rx: 64, ry: 32, rotation: 0, x: 128, y: 64 });
+  expect(commands[1]).toMatchObject({ rx: 128, ry: 64, rotation: 0, x: 256, y: 64 });
 });
 
 test('importing arcs from a translated viewBox keeps their geometry', async ({ page }) => {
@@ -607,8 +607,238 @@ test('importing arcs from a translated viewBox keeps their geometry', async ({ p
   await expect.poll(async () => (await doc(page)).shapes.length).toBe(1);
   const commands = (await doc(page)).shapes[0].commands;
   expect(commands.map((command) => command.type)).toEqual(['M', 'A']);
-  expect(commands[0]).toMatchObject({ x: 0, y: 96 });
-  expect(commands[1]).toMatchObject({ rx: 64, ry: 64, x: 128, y: 96 });
+  expect(commands[0]).toMatchObject({ x: 0, y: 64 });
+  expect(commands[1]).toMatchObject({ rx: 64, ry: 64, x: 128, y: 64 });
+});
+
+test('export keeps imported element types and untouched markup', async ({ page }) => {
+  await load(page, []);
+  const source = [
+    '<rect id="one" x="10" y="10" width="20" height="20" fill="#ff0000"/>',
+    '<rect id="two" x="50" y="10" width="20" height="20" fill="#00ff00"/>',
+    '<rect id="three" x="90" y="10" width="20" height="20" fill="#0000ff"/>',
+    '<path id="arc" d="M 10 100 A 20 20 0 0 1 50 100 L 50 120" fill="none" stroke="#111111" stroke-width="2"/>'
+  ];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    ${source.join('\n    ')}
+  </svg>`;
+
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'structure.svg'), svg);
+  await expect.poll(async () => (await doc(page)).shapes.length).toBe(4);
+
+  const shapes = (await doc(page)).shapes;
+  expect(shapes.map((shape) => shape.type)).toEqual(['rect', 'rect', 'rect', 'path']);
+  expect(shapes[0]).toMatchObject({ x: 10, y: 10, w: 20, h: 20 });
+  expect(shapes[1]).toMatchObject({ x: 50, y: 10, w: 20, h: 20 });
+  expect(shapes[2]).toMatchObject({ x: 90, y: 10, w: 20, h: 20 });
+  expect(shapes[3].commands.map((command) => command.type)).toEqual(['M', 'A', 'L']);
+
+  const untouched = await exportSvg(page);
+  source.forEach((markup) => expect(untouched).toContain(markup));
+  expect((untouched.match(/<rect\b/g) || []).length).toBe(3);
+  expect((untouched.match(/<path\b/g) || []).length).toBe(1);
+  expect(untouched).toContain('A 20 20 0 0 1');
+
+  await page.mouse.click(...Object.values(await point(page, 120, 120)));
+  await page.waitForTimeout(450);
+  await page.mouse.click(...Object.values(await point(page, 20, 20)));
+  await page.waitForTimeout(250);
+  expect(await selection(page)).toEqual([shapes[0].id]);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(120);
+
+  const edited = await exportSvg(page);
+  expect((edited.match(/<rect\b/g) || []).length).toBe(3);
+  expect((edited.match(/<path\b/g) || []).length).toBe(1);
+  expect(edited).toContain(source[1]);
+  expect(edited).toContain(source[2]);
+  expect(edited).toContain(source[3]);
+  expect(edited).toContain('A 20 20 0 0 1');
+
+  const moved = await page.evaluate((text) => {
+    const document = new DOMParser().parseFromString(text, 'image/svg+xml');
+    const rect = document.querySelector('rect');
+    return {
+      x: Number(rect.getAttribute('x')),
+      y: Number(rect.getAttribute('y')),
+      width: Number(rect.getAttribute('width')),
+      height: Number(rect.getAttribute('height'))
+    };
+  }, edited);
+  expect(moved).toEqual({ x: 11, y: 10, width: 20, height: 20 });
+});
+
+test('source structural fidelity survives a reload', async ({ page }) => {
+  await load(page, []);
+  const source = [
+    '<rect id="one" x="10" y="10" width="20" height="20" fill="#ff0000"/>',
+    '<rect id="two" x="50" y="10" width="20" height="20" fill="#00ff00"/>',
+    '<rect id="three" x="90" y="10" width="20" height="20" fill="#0000ff"/>',
+    '<path id="arc" d="M 10 100 A 20 20 0 0 1 50 100 L 50 120" fill="none" stroke="#111111" stroke-width="2"/>'
+  ];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    ${source.join('\n    ')}
+  </svg>`;
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'persist.svg'), svg);
+  await expect.poll(async () => (await doc(page)).shapes.length).toBe(4);
+  await expect.poll(() => page.evaluate(() => Boolean(localStorage.getItem('albedo-svg-studio:source:v1')))).toBe(true);
+
+  await page.reload();
+  await expect(page.locator('#stage')).toBeVisible();
+  await expect.poll(async () => (await doc(page)).shapes.length).toBe(4);
+
+  const restored = await exportSvg(page);
+  source.forEach((markup) => expect(restored).toContain(markup));
+  expect((restored.match(/<rect\b/g) || []).length).toBe(3);
+  expect((restored.match(/<path\b/g) || []).length).toBe(1);
+  expect(restored).toContain('A 20 20 0 0 1');
+});
+
+test('undoing an import restores the previous source template', async ({ page }) => {
+  await load(page, []);
+  const first = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <rect x="10" y="10" width="20" height="20" fill="#ff0000"/>
+    <rect x="50" y="10" width="20" height="20" fill="#00ff00"/>
+    <rect x="90" y="10" width="20" height="20" fill="#0000ff"/>
+  </svg>`;
+  const second = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <circle cx="64" cy="64" r="20" fill="#00ffff"/>
+  </svg>`;
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'first.svg'), first);
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'second.svg'), second);
+  expect((await doc(page)).shapes).toHaveLength(4);
+
+  await page.locator('#undoBtn').click();
+  await page.waitForTimeout(150);
+  expect((await doc(page)).shapes).toHaveLength(3);
+  const undone = await exportSvg(page);
+  expect((undone.match(/<rect\b/g) || []).length).toBe(3);
+  expect(undone).not.toContain('<circle');
+
+  await page.locator('#redoBtn').click();
+  await page.waitForTimeout(150);
+  expect((await doc(page)).shapes).toHaveLength(4);
+  const redone = await exportSvg(page);
+  expect((redone.match(/<rect\b/g) || []).length).toBe(3);
+  expect(redone).toContain('<circle cx="64" cy="64" r="20"');
+});
+
+test('reordering imported layers keeps source markup in the new order', async ({ page }) => {
+  await load(page, []);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <rect id="a" x="10" y="10" width="20" height="20" fill="#ff0000"/>
+    <rect id="b" x="50" y="10" width="20" height="20" fill="#00ff00"/>
+  </svg>`;
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'order.svg'), svg);
+  const ids = (await doc(page)).shapes.map((shape) => shape.id);
+  expect(ids).toHaveLength(2);
+  await page.evaluate((id) => {
+    const row = document.querySelector(`[data-layer-id="${id}"]`);
+    row?.querySelector('[data-layer-action="up"]')?.click();
+  }, ids[0]);
+  await page.waitForTimeout(150);
+  expect((await doc(page)).shapes.map((shape) => shape.name)).toEqual(['order 2', 'order 1']);
+
+  const edited = await exportSvg(page);
+  expect(edited.indexOf('id="b"')).toBeLessThan(edited.indexOf('id="a"'));
+  expect(edited).toContain('<rect id="b" x="50" y="10" width="20" height="20" fill="#00ff00"/>');
+  expect(edited).toContain('<rect id="a" x="10" y="10" width="20" height="20" fill="#ff0000"/>');
+});
+
+test('deleting an imported shape removes its source element', async ({ page }) => {
+  await load(page, []);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <rect id="one" x="10" y="10" width="20" height="20" fill="#ff0000"/>
+    <rect id="two" x="50" y="10" width="20" height="20" fill="#00ff00"/>
+    <rect id="three" x="90" y="10" width="20" height="20" fill="#0000ff"/>
+    <path id="arc" d="M 10 100 A 20 20 0 0 1 50 100 L 50 120" fill="none" stroke="#111111" stroke-width="2"/>
+  </svg>`;
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'delete.svg'), svg);
+  await expect.poll(async () => (await doc(page)).shapes.length).toBe(4);
+  await page.mouse.click(...Object.values(await point(page, 120, 120)));
+  await page.waitForTimeout(450);
+  await page.mouse.click(...Object.values(await point(page, 20, 20)));
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Delete');
+  await page.waitForTimeout(150);
+  expect((await doc(page)).shapes).toHaveLength(3);
+
+  const edited = await exportSvg(page);
+  expect((edited.match(/<rect\b/g) || []).length).toBe(2);
+  expect((edited.match(/<path\b/g) || []).length).toBe(1);
+  expect(edited).not.toContain('id="one"');
+  expect(edited).toContain('id="two"');
+  expect(edited).toContain('A 20 20 0 0 1');
+});
+
+test('editing an imported arc keeps its A commands', async ({ page }) => {
+  await load(page, []);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <path id="arc" d="M 10 100 A 20 20 0 0 1 50 100 L 50 120" fill="none" stroke="#111111" stroke-width="2"/>
+  </svg>`;
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'arc-edit.svg'), svg);
+  await expect.poll(async () => (await doc(page)).shapes.length).toBe(1);
+  const shape = (await doc(page)).shapes[0];
+  expect(shape.commands.map((command) => command.type)).toEqual(['M', 'A', 'L']);
+
+  await page.mouse.click(...Object.values(await point(page, 30, 80)));
+  await page.waitForTimeout(200);
+  expect(await selection(page)).toEqual([shape.id]);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(120);
+
+  const edited = await exportSvg(page);
+  expect((edited.match(/<path\b/g) || []).length).toBe(1);
+  expect(edited).not.toContain('C ');
+  expect(edited).toContain('A 20 20 0 0 1 51 100');
+  expect(edited).toContain('L 51 120');
+});
+
+test('moving an imported gradient shape keeps its paint server', async ({ page }) => {
+  await load(page, []);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff0000"/>
+        <stop offset="1" stop-color="#0000ff"/>
+      </linearGradient>
+    </defs>
+    <rect id="grad" x="10" y="10" width="40" height="40" fill="url(#g)"/>
+  </svg>`;
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'gradient.svg'), svg);
+  await expect.poll(async () => (await doc(page)).shapes.length).toBe(1);
+
+  await page.mouse.click(...Object.values(await point(page, 120, 120)));
+  await page.waitForTimeout(450);
+  await page.mouse.click(...Object.values(await point(page, 20, 20)));
+  await page.waitForTimeout(250);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(120);
+
+  const edited = await exportSvg(page);
+  expect(edited).toContain('<linearGradient id="g"');
+  expect(edited).toContain('fill="url(#g)"');
+  expect(edited).toContain('id="grad"');
+  expect(edited).not.toContain('fill="#ff0000"');
+  expect(edited).toContain('x="11"');
+});
+
+test('root opacity is applied once when an imported shape is edited', async ({ page }) => {
+  await load(page, []);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" opacity="0.5">
+    <rect x="10" y="10" width="40" height="40" fill="#ff0000"/>
+  </svg>`;
+  await page.evaluate((text) => window.__ALBEDO_TEST__.importSvg(text, 'opacity.svg'), svg);
+  await expect.poll(async () => (await doc(page)).shapes.length).toBe(1);
+
+  await page.mouse.click(...Object.values(await point(page, 20, 20)));
+  await page.waitForTimeout(200);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(120);
+
+  const edited = await exportSvg(page);
+  expect((edited.match(/opacity="0\.5"/g) || []).length).toBe(1);
+  expect(edited).toContain('x="11"');
 });
 
 test('importing a compound arc path keeps every subpath', async ({ page }) => {
@@ -671,9 +901,8 @@ test('exporting and re-importing repeatedly does not add shapes to the file', as
   const third = await cycle(second.svg);
   expect(third.svg).not.toContain('<rect width="128" height="128"');
 
-  // Import re-fits the content box to the frame and geometry is stored at two
-  // decimals, so a cycle nudges a coordinate by ~0.01 instead of leaving the
-  // file byte-identical. What has to hold is that it converges rather than grows.
+  // Import keeps source coordinates (no auto-fit), so repeated cycles stay
+  // stable instead of shrinking or growing the drawing.
   third.shapes.forEach((shape, index) => {
     const previous = second.shapes[index];
     expect(shape.type).toBe(previous.type);

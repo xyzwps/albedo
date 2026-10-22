@@ -1,6 +1,7 @@
 import { fmt, pathData, shapeToPathData } from './lib/path.js';
 import { booleanOperands } from './lib/boolean.js';
 import { parseSvg } from './lib/svg-import.js';
+import { invertMatrix, multiplyMatrices, parseTransform } from './lib/svg-path.js';
 import { measureText, outlineCommands, parseLocalFont, textBaselineY } from './lib/text-outline.js';
 import { compareFontData, orderFonts, pushRecentFont, readRecentFonts } from './lib/recent-fonts.js';
 import { snapMove, snapResize, snapPoint } from './lib/snap.js';
@@ -23,6 +24,7 @@ import {
   const MIN_CANVAS = 64;
   const MAX_CANVAS = 10000;
   const STORAGE_KEY = 'albedo-svg-studio:v1';
+  const SOURCE_KEY = 'albedo-svg-studio:source:v1';
   const UNDERLAY_KEY = 'albedo-svg-studio:underlay:v1';
   const MAX_UNDERLAY_STORE = 3200000;
   const MAX_HISTORY = 70;
@@ -201,6 +203,15 @@ import {
     underlayImportToken: 0,
     svgImportToken: 0,
     starter: false,
+    // Source document kept for structural export.  `doc` is a normalized
+    // template, `entries` maps an editable shape id to the source element key
+    // and the signature it had when it was imported.
+    source: null,
+    sourceSerial: 0,
+    sourcePersisted: false,
+    // Doc snapshot -> source template at import boundaries, so undo/redo can
+    // put the matching template back instead of leaving a stale one behind.
+    sourceByDoc: new Map(),
     leftTab: 'insert',
     rightTab: null,
     layerDrag: null,
@@ -626,6 +637,10 @@ import {
       toast(t('toast.historyCorrupt'));
       return;
     }
+    if (state.sourceByDoc.has(json)) {
+      state.source = state.sourceByDoc.get(json) || null;
+      state.sourcePersisted = false;
+    }
     localizeGeneratedNames();
     const existing = new Set(state.doc.shapes.map((s) => s.id));
     state.selectedIds = state.selectedIds.filter((id) => existing.has(id));
@@ -667,9 +682,75 @@ import {
     }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.doc));
-      setSaveState('saved');
     } catch (error) {
       setSaveState('unsaved');
+      return;
+    }
+    try {
+      if (!state.source) {
+        localStorage.removeItem(SOURCE_KEY);
+        state.sourcePersisted = false;
+      } else if (!state.sourcePersisted) {
+        saveSource();
+        state.sourcePersisted = true;
+      }
+    } catch (error) {
+      state.sourcePersisted = false;
+      // The document is still saved; losing the optional source template only
+      // means the next export falls back to a generated file.  Drop any stale
+      // template too, rather than restoring one that does not match this doc.
+      try { localStorage.removeItem(SOURCE_KEY); } catch (removeError) {}
+    }
+    setSaveState('saved');
+  }
+
+  function sourcePayload() {
+    if (!state.source || !state.source.doc) return null;
+    try {
+      return {
+        svg: new XMLSerializer().serializeToString(state.source.doc),
+        entries: Array.from(state.source.entries.entries())
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function saveSource() {
+    const payload = sourcePayload();
+    if (!payload) {
+      localStorage.removeItem(SOURCE_KEY);
+      return;
+    }
+    localStorage.setItem(SOURCE_KEY, JSON.stringify(payload));
+  }
+
+  function loadSavedSource() {
+    try {
+      const raw = localStorage.getItem(SOURCE_KEY);
+      if (!raw) return null;
+      const payload = JSON.parse(raw);
+      if (!payload || typeof payload.svg !== 'string' || !Array.isArray(payload.entries)) return null;
+      const doc = new DOMParser().parseFromString(payload.svg, 'image/svg+xml');
+      const root = doc.documentElement;
+      if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
+      const entries = new Map();
+      payload.entries.forEach((pair) => {
+        if (!Array.isArray(pair) || pair.length !== 2) return;
+        const [id, entry] = pair;
+        if (typeof id !== 'string' || !entry || typeof entry.key !== 'string' || typeof entry.baseline !== 'string') return;
+        entries.set(id, {
+          key: entry.key,
+          baseline: entry.baseline,
+          ancestorOpacity: Number.isFinite(Number(entry.ancestorOpacity))
+            ? clamp(Number(entry.ancestorOpacity), 0, 1)
+            : 1
+        });
+      });
+      if (!entries.size) return null;
+      return { doc, root, entries };
+    } catch (error) {
+      return null;
     }
   }
 
@@ -3556,14 +3637,274 @@ import {
     return '';
   }
 
+  function exportShapeElement(shape) {
+    const f = (value) => fmt(value, 6);
+    const attrs = {
+      fill: shape.type === 'line' ? 'none' : shape.fill,
+      stroke: shape.stroke,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round'
+    };
+    if (shape.strokeWidth) attrs['stroke-width'] = f(shape.strokeWidth);
+    if (shape.opacity !== 1) attrs.opacity = f(shape.opacity);
+    const create = (tag, values) => {
+      const element = document.createElementNS(NS, tag);
+      Object.entries(values).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) element.setAttribute(key, String(value));
+      });
+      return element;
+    };
+    if (shape.type === 'rect') {
+      return create('rect', {
+        ...attrs,
+        x: f(shape.x), y: f(shape.y),
+        width: f(shape.w), height: f(shape.h),
+        rx: f(clamp(shape.rx, 0, Math.min(shape.w, shape.h) / 2))
+      });
+    }
+    if (shape.type === 'ellipse') {
+      return create('ellipse', { ...attrs, cx: f(shape.cx), cy: f(shape.cy), rx: f(shape.rx), ry: f(shape.ry) });
+    }
+    if (shape.type === 'circle') {
+      return create('circle', { ...attrs, cx: f(shape.cx), cy: f(shape.cy), r: f(shape.r) });
+    }
+    if (shape.type === 'polygon') {
+      return create('polygon', { ...attrs, points: shape.points.map((point) => f(point.x) + ',' + f(point.y)).join(' ') });
+    }
+    if (shape.type === 'line') {
+      return create('line', {
+        ...attrs,
+        x1: f(shape.x1), y1: f(shape.y1), x2: f(shape.x2), y2: f(shape.y2)
+      });
+    }
+    if (shape.type === 'path') {
+      const values = { ...attrs, d: pathData(shape.commands, 6) };
+      if (shape.fillRule === 'evenodd') values['fill-rule'] = 'evenodd';
+      return create('path', values);
+    }
+    if (shape.type === 'text') {
+      const entry = shape.fontFamily ? state.fonts.get(shape.fontFamily) : null;
+      if (!entry) return null;
+      const commands = outlineCommands(entry.font, shape.text, shape.x, textBaselineY(shape, entry.font), shape.fontSize);
+      if (!commands.length) return null;
+      const group = document.createElementNS(NS, 'g');
+      group.appendChild(create('path', { ...attrs, d: pathData(commands, 6) }));
+      return group;
+    }
+    return null;
+  }
+
+  function matrixAttribute(matrix) {
+    const values = [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f]
+      .map((value) => String(Number(value.toFixed(6))));
+    return 'matrix(' + values.join(' ') + ')';
+  }
+
+  function matrixIsIdentity(matrix) {
+    return Math.abs(matrix.a - 1) < 1e-9 && Math.abs(matrix.b) < 1e-9 &&
+      Math.abs(matrix.c) < 1e-9 && Math.abs(matrix.d - 1) < 1e-9 &&
+      Math.abs(matrix.e) < 1e-9 && Math.abs(matrix.f) < 1e-9;
+  }
+
+  function sourceParentMatrix(element, root) {
+    const chain = [];
+    for (let node = element.parentElement; node; node = node.parentElement) {
+      chain.push(node);
+      if (node === root) break;
+    }
+    chain.reverse();
+    let matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    for (const node of chain) {
+      if (/(?:^|;)\s*transform\s*:/i.test(node.getAttribute('style') || '')) return null;
+      const value = node.getAttribute('transform');
+      if (!value) continue;
+      const transform = parseTransform(value);
+      if (!transform) return null;
+      matrix = multiplyMatrices(matrix, transform);
+    }
+    return matrix;
+  }
+
+  function sourceElement(doc, key) {
+    const escaped = String(key).replace(/["\\]/g, '\\$&');
+    return doc.querySelector('[data-albedo-key="' + escaped + '"]');
+  }
+
   /**
-   * The artboard and its background are view state: the `viewBox` says where
-   * the drawing sits, and nothing else about the canvas is written out.  An
-   * exported background would come back as an ordinary shape on import, so
-   * every export/import cycle would stack another full-canvas rect into the
-   * file.
+   * Keep source z-order in sync with the layer panel.  Only elements sharing a
+   * parent can be swapped without moving them across groups; non-shape siblings
+   * keep their slots.
    */
-  function buildSvg() {
+  function reorderSource(doc, root, shapes, entries) {
+    const order = new Map();
+    shapes.forEach((shape, index) => order.set(shape.id, index));
+    const byParent = new Map();
+    shapes.forEach((shape) => {
+      const entry = entries.get(shape.id);
+      if (!entry) return;
+      const element = sourceElement(root, entry.key);
+      if (!element || !element.parentNode) return;
+      const parent = element.parentNode;
+      if (!byParent.has(parent)) byParent.set(parent, []);
+      byParent.get(parent).push({ element, order: order.get(shape.id) });
+    });
+    byParent.forEach((items, parent) => {
+      const seen = new Set();
+      const unique = items.filter((item) => {
+        if (seen.has(item.element)) return false;
+        seen.add(item.element);
+        return true;
+      });
+      if (unique.length < 2) return;
+      const slots = unique.map((item) => ({
+        ...item,
+        slot: Array.prototype.indexOf.call(parent.childNodes, item.element)
+      })).sort((a, b) => a.slot - b.slot);
+      const desired = slots.slice().sort((a, b) => a.order - b.order);
+      if (desired.every((item, index) => item.element === slots[index].element)) return;
+      slots.forEach((item) => {
+        item.placeholder = doc.createComment('albedo-order');
+        parent.replaceChild(item.placeholder, item.element);
+      });
+      slots.forEach((slot, index) => {
+        parent.replaceChild(desired[index].element, slot.placeholder);
+      });
+    });
+  }
+
+  function withSourceOpacity(shape, entry) {
+    const factor = Number(entry.ancestorOpacity);
+    if (!(factor > 0) || Math.abs(factor - 1) < 1e-9) return shape;
+    return { ...shape, opacity: clamp(shape.opacity / factor, 0, 1) };
+  }
+
+  /**
+   * When only geometry changed, keep the original paint attributes.  This
+   * preserves gradients, patterns, dash arrays and other styling the editor
+   * model does not represent.
+   */
+  function keepSourcePaint(element, generated, shape, entry) {
+    let baseline;
+    try {
+      baseline = JSON.parse(entry.baseline);
+    } catch (error) {
+      return;
+    }
+    if (!baseline) return;
+    const current = normalizeDoc({ width: MIN_CANVAS, height: MIN_CANVAS, shapes: [shape] }).shapes[0];
+    const keys = ['fill', 'stroke', 'strokeWidth', 'opacity', 'fillRule'];
+    if (!keys.every((key) => current[key] === baseline[key])) return;
+    const fill = element.getAttribute('fill') || '';
+    const stroke = element.getAttribute('stroke') || '';
+    const paintServer = /^url\(/i.test(fill) || /^url\(/i.test(stroke);
+    [
+      'fill', 'fill-rule', 'clip-rule', 'stroke', 'stroke-width', 'stroke-linecap',
+      'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset',
+      'stroke-miterlimit', 'paint-order', 'vector-effect',
+      'marker-start', 'marker-mid', 'marker-end',
+      'color-interpolation', 'shape-rendering'
+    ].forEach((name) => {
+      const value = element.getAttribute(name);
+      if (value !== null) generated.setAttribute(name, value);
+    });
+    if (paintServer) {
+      // A gradient/pattern carries its own alpha in its stops; the model
+      // opacity already folded the first stop's alpha in, so use the source
+      // element's own opacity instead to avoid applying it twice.
+      const ownOpacity = element.getAttribute('opacity');
+      if (ownOpacity !== null) generated.setAttribute('opacity', ownOpacity);
+      else generated.removeAttribute('opacity');
+    }
+  }
+
+  /**
+   * Export from the source template.  Untouched shapes are left exactly as
+   * they were authored (primitive type, `d` data, ids, attributes); only
+   * changed shapes are regenerated, and added shapes are appended.  Generated
+   * shapes that live inside a transformed source group receive the inverse of
+   * the group matrix so they still render at their editor coordinates.
+   */
+  function buildSourceSvg() {
+    const source = state.source;
+    const shapes = state.doc.shapes;
+    if (!source || !source.doc) return null;
+    const entries = source.entries;
+
+    const doc = source.doc.cloneNode(true);
+    const root = doc.documentElement;
+    const W = state.doc.width;
+    const H = state.doc.height;
+    root.setAttribute('width', String(W));
+    root.setAttribute('height', String(H));
+    root.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+    let title = Array.from(root.children).find((element) => element.nodeName.toLowerCase() === 'title');
+    if (!title) {
+      title = doc.createElementNS(NS, 'title');
+      root.insertBefore(title, root.firstChild);
+    }
+    title.textContent = state.doc.name || t('doc.untitled');
+
+    reorderSource(doc, root, shapes, entries);
+    shapes.forEach((shape) => {
+      const entry = entries.get(shape.id);
+      if (!entry) {
+        const element = exportShapeElement(shape);
+        if (element) root.appendChild(element);
+        return;
+      }
+      const element = sourceElement(doc, entry.key);
+      if (!element) {
+        const generated = exportShapeElement(shape);
+        if (generated) root.appendChild(generated);
+        return;
+      }
+      if (shapeSignature(shape) === entry.baseline) return;
+      const generated = exportShapeElement(withSourceOpacity(shape, entry));
+      if (!generated) return;
+      keepSourcePaint(element, generated, shape, entry);
+      const sourceId = element.getAttribute('id');
+      if (sourceId) generated.setAttribute('id', sourceId);
+      ['filter', 'clip-path', 'mask'].forEach((name) => {
+        const value = element.getAttribute(name);
+        if (value) generated.setAttribute(name, value);
+      });
+      const parentMatrix = sourceParentMatrix(element, root);
+      const inverse = parentMatrix ? invertMatrix(parentMatrix) : null;
+      if (!inverse) {
+        // The ancestor transform cannot be expressed (e.g. a CSS transform).
+        // Generate at the root so editor coordinates stay correct instead of
+        // letting the unknown transform apply twice.
+        if (element.parentNode) element.parentNode.removeChild(element);
+        root.appendChild(generated);
+        return;
+      }
+      if (!matrixIsIdentity(inverse)) {
+        generated.setAttribute('transform', matrixAttribute(inverse));
+      }
+      element.parentNode.replaceChild(generated, element);
+    });
+
+    entries.forEach((entry, id) => {
+      if (shapes.some((shape) => shape.id === id)) return;
+      const element = sourceElement(doc, entry.key);
+      if (element && element.parentNode) element.parentNode.removeChild(element);
+    });
+
+    doc.querySelectorAll('[data-albedo-key]').forEach((element) => {
+      element.removeAttribute('data-albedo-key');
+    });
+
+    const serialized = new XMLSerializer().serializeToString(doc);
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + serialized + '\n';
+  }
+
+  /**
+   * Fallback for documents without a source template (new drawings, or a
+   * source that could not be mapped): the artboard and its background are view
+   * state and are not written as shapes.
+   */
+  function buildGeneratedSvg() {
     const W = state.doc.width;
     const H = state.doc.height;
     const lines = [
@@ -3577,6 +3918,10 @@ import {
     });
     lines.push('</svg>', '');
     return lines.join('\n');
+  }
+
+  function buildSvg() {
+    return buildSourceSvg() || buildGeneratedSvg();
   }
 
   async function exportSvg() {
@@ -3886,38 +4231,155 @@ import {
     return base || t('shape.path');
   }
 
-  function fitImportedShapes(shapes, source) {
-    if (!shapes.length) return;
-    const sameSize = source && Number.isFinite(source.width) && Number.isFinite(source.height) &&
-      Math.abs(source.width - state.doc.width) < 0.5 &&
-      Math.abs(source.height - state.doc.height) < 0.5;
-    const bounds = unionBounds(shapes.map((shape) => getShapeBounds(shape)));
-    const boundsW = Math.max(bounds.w, 0.001);
-    const boundsH = Math.max(bounds.h, 0.001);
-    const padding = sameSize ? 0 : Math.max(4, Math.min(state.doc.width, state.doc.height) * 0.05);
-    const availableW = Math.max(1, state.doc.width - padding * 2);
-    const availableH = Math.max(1, state.doc.height - padding * 2);
-    const scale = Math.min(availableW / boundsW, availableH / boundsH);
-    if (!Number.isFinite(scale) || scale <= 0) return;
-    const width = Math.max(0.001, boundsW * scale);
-    const height = Math.max(0.001, boundsH * scale);
-    const target = {
-      x: (state.doc.width - width) / 2,
-      y: (state.doc.height - height) / 2,
-      w: width,
-      h: height
+  function stableStringify(value) {
+    if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
+    if (value && typeof value === 'object') {
+      return '{' + Object.keys(value).sort()
+        .map((key) => JSON.stringify(key) + ':' + stableStringify(value[key]))
+        .join(',') + '}';
+    }
+    return JSON.stringify(value);
+  }
+
+  function shapeSignature(shape) {
+    // Compare the same canonical form that normalizeDoc will produce after a
+    // save/reload, so persisted baselines keep matching.
+    const canonical = normalizeDoc({
+      width: MIN_CANVAS, height: MIN_CANVAS, shapes: [shape]
+    }).shapes[0];
+    const copy = deepClone(canonical);
+    delete copy.id;
+    delete copy.name;
+    delete copy.sourceKey;
+    if (Array.isArray(copy.commands)) copy.commands.forEach((command) => delete command.id);
+    return stableStringify(copy);
+  }
+
+  function ancestorOpacityFor(element) {
+    let opacity = 1;
+    for (let node = element?.parentElement; node; node = node.parentElement) {
+      const directValue = node.getAttribute('opacity');
+      if (directValue !== null && directValue.trim() !== '') {
+        const direct = Number(directValue);
+        if (Number.isFinite(direct)) opacity *= clamp(direct, 0, 1);
+      }
+      const style = node.getAttribute('style') || '';
+      const match = /(?:^|;)\s*opacity\s*:\s*([+-]?(?:\d+\.?\d*|\.\d+))/i.exec(style);
+      if (match) opacity *= clamp(Number(match[1]), 0, 1);
+      if (node.nodeName.toLowerCase() === 'svg') break;
+    }
+    return clamp(opacity, 0, 1);
+  }
+
+  function prefixSourceIds(root, prefix) {
+    const ids = new Map();
+    root.querySelectorAll('[id]').forEach((element) => {
+      const oldId = element.getAttribute('id');
+      if (!oldId) return;
+      const nextId = prefix + oldId;
+      ids.set(oldId, nextId);
+      element.setAttribute('id', nextId);
+    });
+    if (!ids.size) return;
+    const replace = (value) => String(value).replace(/url\(\s*#([^)\s]+)\s*\)/g,
+      (match, id) => (ids.has(id) ? 'url(#' + ids.get(id) + ')' : match));
+    const rewrite = (element) => {
+      Array.from(element.attributes).forEach((attr) => {
+        if (attr.name === 'id') return;
+        if (attr.name === 'href' || attr.name.endsWith(':href')) {
+          if (attr.value.startsWith('#') && ids.has(attr.value.slice(1))) {
+            element.setAttribute(attr.name, '#' + ids.get(attr.value.slice(1)));
+          }
+          return;
+        }
+        if (attr.value.includes('url(')) element.setAttribute(attr.name, replace(attr.value));
+      });
     };
+    rewrite(root);
+    root.querySelectorAll('*').forEach(rewrite);
+  }
+
+  function importCanvasSize(source, replaceStarter) {
+    const width = Number(source?.width);
+    const height = Number(source?.height);
+    if (!(width > 0) || !(height > 0)) return;
+    const nextW = clamp(Math.round(width), MIN_CANVAS, MAX_CANVAS);
+    const nextH = clamp(Math.round(height), MIN_CANVAS, MAX_CANVAS);
+    if (replaceStarter) {
+      state.doc.width = nextW;
+      state.doc.height = nextH;
+    } else {
+      state.doc.width = clamp(Math.max(state.doc.width, nextW), MIN_CANVAS, MAX_CANVAS);
+      state.doc.height = clamp(Math.max(state.doc.height, nextH), MIN_CANVAS, MAX_CANVAS);
+    }
+  }
+
+  function cloneSource(source) {
+    if (!source || !source.doc) return null;
+    const doc = source.doc.cloneNode(true);
+    return { doc, root: doc.documentElement, entries: new Map(source.entries) };
+  }
+
+  /**
+   * Keep the source template around so export can re-emit untouched elements
+   * verbatim and only replace the shapes that actually changed.
+   */
+  function rememberSource(parsed, shapes, replace) {
+    if (!parsed.sourceDoc || !parsed.sourceRoot) return;
+    let shapeByKey = new Map();
     shapes.forEach((shape) => {
-      const original = deepClone(shape);
-      // resizeShape maps the shape's own box onto the given frame; derive a
-      // per-shape frame from the group mapping so primitives scale in place
-      // instead of stretching to the whole target.
-      const own = getShapeBounds(original);
-      resizeShape(shape, original, own, {
-        x: target.x + (own.x - bounds.x) * scale,
-        y: target.y + (own.y - bounds.y) * scale,
-        w: Math.max(0.001, own.w * scale),
-        h: Math.max(0.001, own.h * scale)
+      if (shape.sourceKey) shapeByKey.set(shape.sourceKey, shape);
+    });
+    if (!shapeByKey.size) return;
+    if (replace || !state.source) {
+      state.source = { doc: parsed.sourceDoc, root: parsed.sourceRoot, entries: new Map() };
+    } else {
+      // Keep import checkpoints immutable: merge into a copy rather than the
+      // template that an earlier undo state may still reference.
+      state.source = cloneSource(state.source);
+      state.sourceSerial += 1;
+      const prefix = uid('imp') + '-';
+      const existingIds = new Set();
+      state.source.root.querySelectorAll('[id]').forEach((element) => existingIds.add(element.getAttribute('id')));
+      const collides = Array.from(parsed.sourceRoot.querySelectorAll('[id]'))
+        .some((element) => existingIds.has(element.getAttribute('id')));
+      if (collides) prefixSourceIds(parsed.sourceRoot, prefix);
+      const keyMap = new Map();
+      parsed.sourceRoot.querySelectorAll('[data-albedo-key]').forEach((element) => {
+        const oldKey = element.getAttribute('data-albedo-key');
+        if (!oldKey) return;
+        const nextKey = prefix + oldKey;
+        keyMap.set(oldKey, nextKey);
+        element.setAttribute('data-albedo-key', nextKey);
+      });
+      // Root-level presentation attributes (fill, stroke, style, opacity, ...)
+      // are inherited by the imported children.  Keep them on a wrapper so the
+      // merged document still renders the new import as it did on its own.
+      const wrapper = parsed.sourceDoc.createElementNS(
+        parsed.sourceRoot.namespaceURI || 'http://www.w3.org/2000/svg', 'g'
+      );
+      const skipRootAttrs = new Set(['width', 'height', 'viewBox', 'preserveAspectRatio', 'version', 'id', 'x', 'y']);
+      Array.from(parsed.sourceRoot.attributes).forEach((attr) => {
+        if (attr.name === 'xmlns' || attr.name.startsWith('xmlns:')) return;
+        if (skipRootAttrs.has(attr.name)) return;
+        wrapper.setAttribute(attr.name, attr.value);
+      });
+      Array.from(parsed.sourceRoot.childNodes).forEach((node) => {
+        if (node.nodeType === 1 && node.nodeName.toLowerCase() === 'title') return;
+        wrapper.appendChild(node);
+      });
+      state.source.root.appendChild(wrapper);
+      const renamed = new Map();
+      shapeByKey.forEach((shape, oldKey) => renamed.set(keyMap.get(oldKey) || oldKey, shape));
+      shapeByKey = renamed;
+    }
+    shapeByKey.forEach((shape, key) => {
+      const escaped = key.replace(/["\\]/g, '\\$&');
+      const element = state.source.root.querySelector('[data-albedo-key="' + escaped + '"]');
+      state.source.entries.set(shape.id, {
+        key,
+        baseline: shapeSignature(shape),
+        ancestorOpacity: element ? ancestorOpacityFor(element) : 1
       });
     });
   }
@@ -3938,18 +4400,26 @@ import {
     flushEdit();
     const before = snapshot();
     const replaceStarter = state.starter;
+    const replaceSource = replaceStarter || state.doc.shapes.length === 0;
     const base = svgBaseName(name);
-    const shapes = parsed.shapes.map((shape, index) => ({
-      ...shape,
-      id: uid('s'),
-      name: base + ' ' + (index + 1)
-    }));
-    fitImportedShapes(shapes, parsed.source);
+    const shapes = parsed.shapes.map((shape, index) => {
+      const next = { ...shape, id: uid('s'), name: base + ' ' + (index + 1) };
+      if (next.type === 'path') next.commands = normalizeCommands(next.commands);
+      return next;
+    });
+    const previousSource = cloneSource(state.source);
+    if (replaceSource) state.source = null;
+    rememberSource(parsed, shapes, replaceSource);
+    shapes.forEach((shape) => delete shape.sourceKey);
+    importCanvasSize(parsed.source, replaceStarter);
     if (replaceStarter) {
       state.doc.shapes = [];
       if (state.doc.name === t('doc.untitled')) state.doc.name = base;
     }
     state.doc.shapes.push(...shapes);
+    state.sourceByDoc.set(before, previousSource);
+    state.sourceByDoc.set(snapshot(), state.source);
+    state.sourcePersisted = false;
     applySelection(shapes.map((shape) => shape.id));
     state.pathEdit = false;
     state.rightTab = 'style';
@@ -4013,10 +4483,16 @@ import {
   function newDocument() {
     flushEdit();
     const before = snapshot();
+    const previousSource = state.source;
     const width = state.doc.width;
     const height = state.doc.height;
     const hasUnderlay = Boolean(state.underlay);
     state.doc = { name: t('doc.untitled'), background: '#fffdf8', width, height, shapes: [] };
+    state.source = null;
+    state.sourceSerial = 0;
+    state.sourceByDoc.set(before, previousSource);
+    state.sourceByDoc.set(snapshot(), null);
+    state.sourcePersisted = false;
     applySelection([]);
     state.pathEdit = true;
     state.underlayAdjust = false;
@@ -4712,6 +5188,11 @@ import {
         flushEdit();
         state.doc = normalizeDoc(doc);
         state.starter = false;
+        state.source = null;
+        state.sourceSerial = 0;
+        state.sourceByDoc.clear();
+        state.sourcePersisted = false;
+        try { localStorage.removeItem(SOURCE_KEY); } catch (error) {}
         state.undo = [];
         state.redo = [];
         state.underlayAdjust = false;
@@ -4772,6 +5253,8 @@ import {
     const saved = loadSaved();
     state.doc = saved || starterDocument();
     state.starter = !saved;
+    state.source = saved ? loadSavedSource() : null;
+    state.sourcePersisted = Boolean(state.source);
     localizeGeneratedNames();
     if (saved) {
       applySelection([]);

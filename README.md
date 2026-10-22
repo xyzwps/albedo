@@ -8,8 +8,8 @@
 - `lib/i18n.js` — 简体中文 / English 文案、语言检测、复数与插值。
 - `lib/path.js` — 路径/图元到 SVG `d` 的序列化。
 - `lib/boolean.js` — 基于 Paper.js 的曲线布尔运算（并集/差集/交集/排除）。
-- `lib/svg-import.js` — 用 Paper.js 解析导入的 SVG，把路径、变换与继承样式转成可编辑图形；变换可表达时 `rect`/`circle`/`ellipse` 保持原生图元类型，路径中的 `A` 圆弧会尽量保留。
-- `lib/svg-path.js` — SVG 路径数据解析、变换矩阵与椭圆弧仿射变换（导入时用来保留 `A` 命令），以及 `rect`/`circle`/`ellipse` 经仿射矩阵后的图元几何换算。图标库仓库 `~/develop/logo-icon` 的 bake 工具留着这份文件逐字一致的另一份拷贝（两边各自 `test/svg-path.test.js`）；改了这里要记得同步过去，反过来也一样。
+- `lib/svg-import.js` — 用 Paper.js 解析导入的 SVG，把路径、变换与继承样式转成可编辑图形；变换可表达时 `rect`/`circle`/`ellipse`/`line`/`polygon` 保持原生图元类型，路径中的 `A` 圆弧会尽量保留。导入同时保留一份规范化源模板，导出时未改动的元素原样写回；改动图形时，未变的填充/描边、虚线、渐变引用等绘制属性也会尽量沿用源元素。
+- `lib/svg-path.js` — SVG 路径数据解析、变换矩阵、仿射矩阵求逆与椭圆弧仿射变换（导入时用来保留 `A` 命令），以及 `rect`/`circle`/`ellipse` 经仿射矩阵后的图元几何换算。图标库仓库 `~/develop/logo-icon` 的 bake 工具留着这份文件逐字一致的另一份拷贝（两边各自 `test/svg-path.test.js`）；改了这里要记得同步过去，反过来也一样。
 - `lib/snap.js` — 网格、图形边缘/中心、路径节点的吸附数学。
 - `lib/align.js` — 对齐与等距分布数学。
 - `lib/zoom.js` — 画布缩放：档位表、范围钳制、滚轮因子与保持锚点不动的滚动换算。
@@ -43,10 +43,10 @@ npm run dev
 ```bash
 npm run test:unit   # Vitest：path / boolean / snap / align / zoom / i18n / sfnt / text-outline / recent-fonts
 npm run test:e2e    # 先构建，再用 Playwright + 本机 Chrome 跑浏览器测试
-npm test            # 构建 + 单元测试 + E2E
+npm test            # spec:check + 构建 + 单元测试 + E2E
 ```
 
-本仓库只有这一个工具，`npm test` 跑的就是上面两条。E2E 需要构建产物，所以 `test:e2e` 会先执行一次 `npm run build`。
+本仓库只有这一个工具，`npm test` 跑的就是上面的检查加两条测试。E2E 需要构建产物，所以 `test:e2e` 会先执行一次 `npm run build`。
 
 E2E 使用系统 Chrome（`channel: 'chrome'`），不需要额外下载 Playwright 浏览器。测试通过 `window.__ALBEDO_TEST__` 载入固定文档，避免依赖自动保存的本地状态。E2E 默认使用 `en-US`；i18n 用例会分别模拟 `zh-CN`、`zh-TW`、`fr-FR` 等语言环境。字体用例会 `grantPermissions(['local-fonts'])` 跳过系统的授权弹窗，并只在 macOS 上跑（依赖本机系统字体清单）；其中一条故意不授权，用来验证弹窗显示的是权限指引而不是空白列表。
 
@@ -71,8 +71,23 @@ E2E 使用系统 Chrome（`channel: 'chrome'`），不需要额外下载 Playwri
 - 为什么这样定：以前导出会在最底层写一张满幅 `<rect>` 当背景，而导入会把任何矩形当作普通图形读进来——于是「导出 → 导入 → 再导出」每循环一次文件里就多一张满幅矩形，反复几次就堆出一堆无关元素。
 - 想要一张真正参与构图的底色，就在画布上画一个矩形图形：它是你的图形，可编辑、可参与布尔运算、会照常导出。
 - 导入不猜意图：早先导出的文件里那张满幅背景矩形，重新导入时仍会作为一个普通图形进来，需要就手动删掉。
-- 副作用要说清楚：导入本来就把内容盒等比贴合到画布（和图标库的 bake 规则同源）。以前那张满幅矩形把内容盒钉成整张画布，缩放系数正好是 1，坐标看着「没变」；现在不满幅的图样导出后再导入，会被放大到贴边，第二轮起才基本不动。
-- 回归用例 `exporting and re-importing repeatedly does not add shapes to the file` 锁住闭环：导出→导入→导出连跑两轮，图形数不变、文件里没有满幅矩形、坐标只会漂移而不会持续膨胀（几何存两位小数，实测每轮 ≤ 0.01）。
+- 导入保留源坐标，不再把内容盒缩放贴合画布：替换示例文档时画布取源尺寸，追加导入时画布只增不减。这样 3 个 `rect` 导入再导出仍是同样坐标的 3 个 `rect`，不会被放大、移动或变成 `path`。
+- 导出优先复用导入时保存的源模板：未改动的元素按原标记写回（元素类型、属性顺序、数值文本、`id`、注释、`defs`/`style` 都保留），只有改动过的图形才按模型重新生成；重新生成时保持原生 `rect`/`circle`/`ellipse`/`line`/`polygon` 类型和路径的 `A` 命令，新增图形追加，删除图形移除对应源元素，层顺序变化时按文档顺序重排同一父级中的源元素。
+- 源模板随文档自动保存到 `localStorage`；撤销/重做导入时模板一起恢复，所以重新打开页面后继续编辑、导出仍能保住未改动的结构。
+- 无法映射到可编辑图形的源元素（如 `text`、`image`）在未改动时原样留在文件里；如果整个文件没有可编辑图形，导入仍会提示没有图形。
+- 回归用例 `exporting and re-importing repeatedly does not add shapes to the file` 锁住闭环：图形数不变、文件里没有满幅矩形、坐标不再漂移；`export keeps imported element types and untouched markup` 和 `editing an imported arc keeps its A commands` 锁住类型/坐标/`A` 命令的保真。
+
+## 规格与工作流
+
+用户可见行为先写进 `docs/specs/` 用例册，再补失败测试，最后改代码；可执行测试是册子的影子，不是反过来。
+
+- 册子索引：[`docs/specs/index.md`](docs/specs/index.md)。
+- SVG 导入 / 编辑 / 导出的结构保真契约：[`docs/specs/svg-roundtrip/spec.md`](docs/specs/svg-roundtrip/spec.md)。
+- 原理、持久化细节与已知降级边界：[`docs/notes/svg-roundtrip.md`](docs/notes/svg-roundtrip.md)。
+- 测试标题以册子号开头，例如 `test('[SVG-001] ...', ...)`；`npm run spec:check` 做册子结构检查与双向覆盖，
+  册里有号没测试、测试有号册里没有都会报错。
+- 改用户可见行为的顺序：改册子 → 补一条会失败的 `[SVG-0NN]` 测试 → 改代码到绿 → `npm test`。
+- `npm test` 现在先跑 `spec:check`，再跑单元测试与 E2E；收尾要报告跑了哪些闸门，并等确认是否提交。
 
 ## 多语言
 
