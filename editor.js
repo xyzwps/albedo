@@ -58,7 +58,6 @@ import {
   const SHAPE_COLORS = ['#f2c75c', '#f26b4f', '#7bb6a4', '#98a6e8', '#e9a4b8', '#cfd8a6'];
   const RAIL_META = {
     insert: { labelKey: 'nav.insert', icon: 'insert' },
-    guides: { labelKey: 'nav.guides', icon: 'guides' },
     layers: { labelKey: 'nav.layers', icon: 'layers' },
     document: { labelKey: 'nav.document', icon: 'document' },
     shortcuts: { labelKey: 'nav.shortcuts', icon: 'keyboard' },
@@ -74,7 +73,6 @@ import {
   };
   const RAIL_ICONS = {
     insert: '<path d="M64 28v72M28 64h72"/>',
-    guides: '<path d="M30 30h68v68H30z"/><path d="M64 30v68M30 64h68"/>',
     layers: '<path d="M64 20 16 44l48 24 48-24-48-24Z"/><path d="M16 64l48 24 48-24"/><path d="M16 84l48 24 48-24"/>',
     document: '<rect x="24" y="18" width="80" height="92" rx="10"/><path d="M40 44h48M40 64h48M40 84h30"/>',
     keyboard: '<rect x="18" y="38" width="92" height="52" rx="8"/><circle cx="37" cy="56" r="4" fill="currentColor" stroke="none"/><circle cx="57" cy="56" r="4" fill="currentColor" stroke="none"/><circle cx="77" cy="56" r="4" fill="currentColor" stroke="none"/><circle cx="97" cy="56" r="4" fill="currentColor" stroke="none"/><path d="M34 78h60"/>',
@@ -131,13 +129,16 @@ import {
     underlayRemoveBtn: $('#underlayRemoveBtn'),
     underlayHint: $('#underlayHint'),
     underlayFile: $('#underlayFile'),
+    underlayToggle: $('#underlayToggle'),
+    underlayPopover: $('#underlayPopover'),
+    underlayPopoverClose: $('#underlayPopoverClose'),
+    underlayStateDot: $('#underlayStateDot'),
     importSvgFile: $('#importSvgFile'),
     importSvgBtn: $('#importSvgBtn'),
     insertSvgBtn: $('#insertSvgBtn'),
     stageDrop: $('#stageDrop'),
     docTitle: $('#docTitle'),
     saveState: $('#saveState'),
-    crumbTitle: $('#crumbTitle'),
     coordStatus: $('#coordStatus'),
     shapeStatus: $('#shapeStatus'),
     nodeStatus: $('#nodeStatus'),
@@ -381,7 +382,6 @@ import {
     const changedNames = localizeGeneratedNames();
     if (state.doc) {
       dom.docTitle.value = state.doc.name;
-      dom.crumbTitle.textContent = state.doc.name;
       if (!dom.canvasModal.hidden) dom.canvasSizeError.textContent = '';
       renderAll();
       if (changedNames) markDirty();
@@ -657,7 +657,6 @@ import {
     }
     if (!state.selectedIds.length) state.selectedCmdId = null;
     dom.docTitle.value = state.doc.name;
-    dom.crumbTitle.textContent = state.doc.name;
     renderAll();
     updateHistoryButtons();
     markDirty();
@@ -1582,9 +1581,22 @@ import {
   }
 
   function syncAssistControls() {
-    if (dom.gridToggle) dom.gridToggle.checked = state.grid.visible;
+    if (dom.gridToggle) {
+      dom.gridToggle.classList.toggle('is-active', state.grid.visible);
+      dom.gridToggle.setAttribute('aria-pressed', String(state.grid.visible));
+    }
     if (dom.gridSize) dom.gridSize.value = String(state.grid.size);
-    if (dom.snapToggle) dom.snapToggle.checked = state.snapEnabled;
+    if (dom.snapToggle) {
+      dom.snapToggle.classList.toggle('is-active', state.snapEnabled);
+      dom.snapToggle.setAttribute('aria-pressed', String(state.snapEnabled));
+    }
+    if (dom.underlayToggle) {
+      const hasReference = Boolean(state.underlay);
+      const visible = hasReference && state.underlay.visible;
+      dom.underlayToggle.classList.toggle('has-reference', hasReference);
+      dom.underlayToggle.classList.toggle('is-off', hasReference && !visible);
+      dom.underlayToggle.title = hasReference ? t('underlay.manageTitle') : t('underlay.importTitle');
+    }
   }
 
   function renderGrid() {
@@ -1725,13 +1737,13 @@ import {
   function renderAll() {
     dom.canvasBg.setAttribute('fill', state.doc.background);
     dom.docTitle.value = state.doc.name;
-    dom.crumbTitle.textContent = state.doc.name || t('doc.untitled');
     renderGrid();
     renderUnderlay();
     renderCanvas();
     renderLayers();
     renderInspector();
     renderUnderlayPanel();
+    syncAssistControls();
     updateHistoryButtons();
     updateCanvasTip();
     fitArtboard();
@@ -2083,6 +2095,12 @@ import {
       '</div>';
   }
 
+  function setUnderlayPopover(open) {
+    if (!dom.underlayPopover || !dom.underlayToggle) return;
+    dom.underlayPopover.hidden = !open;
+    dom.underlayToggle.setAttribute('aria-expanded', String(open));
+  }
+
   function renderUnderlayPanel() {
     const u = state.underlay;
     dom.underlayEmpty.hidden = Boolean(u);
@@ -2092,6 +2110,7 @@ import {
     if (!u) {
       dom.underlayThumb.removeAttribute('src');
       dom.underlayHint.hidden = true;
+      syncAssistControls();
       return;
     }
     if (dom.underlayThumb.getAttribute('src') !== u.src) dom.underlayThumb.src = u.src;
@@ -2120,6 +2139,7 @@ import {
       ? t('underlay.inspectorHintMoving')
       : t('underlay.inspectorHint');
     dom.underlayHint.hidden = !state.underlayAdjust;
+    syncAssistControls();
   }
 
   function renderPolygonInspector(shape) {
@@ -4202,8 +4222,8 @@ import {
         state.underlayWarned = false;
         state.underlayPersistFailed = false;
         applySelection([]);
-        activateLeftTab('guides');
         renderAll();
+        setUnderlayPopover(true);
         toast(t('toast.underlayImported'));
         saveUnderlayNow();
       };
@@ -4507,7 +4527,6 @@ import {
   function updateDocTitle() {
     const value = dom.docTitle.value.trim() || t('doc.untitled');
     state.doc.name = value;
-    dom.crumbTitle.textContent = value;
     markDirty();
   }
 
@@ -4586,8 +4605,9 @@ import {
     bindPanelTabs(dom.leftRail, activateLeftTab);
     bindPanelTabs(dom.inspectorRail, activateRightTab);
 
-    dom.gridToggle.addEventListener('change', () => {
-      state.grid.visible = dom.gridToggle.checked;
+    dom.gridToggle.addEventListener('click', () => {
+      state.grid.visible = !state.grid.visible;
+      syncAssistControls();
       renderGrid();
     });
     dom.gridSize.addEventListener('change', () => {
@@ -4595,8 +4615,9 @@ import {
       state.grid.size = GRID_SIZES.includes(size) ? size : 8;
       renderGrid();
     });
-    dom.snapToggle.addEventListener('change', () => {
-      state.snapEnabled = dom.snapToggle.checked;
+    dom.snapToggle.addEventListener('click', () => {
+      state.snapEnabled = !state.snapEnabled;
+      syncAssistControls();
       if (!state.snapEnabled) {
         state.snapGuides = [];
         renderOverlay();
@@ -4605,6 +4626,18 @@ import {
 
     dom.underlayImportBtn.addEventListener('click', () => dom.underlayFile.click());
     dom.underlayReplaceBtn.addEventListener('click', () => dom.underlayFile.click());
+    dom.underlayToggle.addEventListener('click', () => setUnderlayPopover(dom.underlayPopover.hidden));
+    dom.underlayPopoverClose.addEventListener('click', () => setUnderlayPopover(false));
+    document.addEventListener('pointerdown', (event) => {
+      if (!dom.underlayPopover || dom.underlayPopover.hidden) return;
+      if (dom.underlayPopover.contains(event.target) || dom.underlayToggle.contains(event.target)) return;
+      setUnderlayPopover(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !dom.underlayPopover || dom.underlayPopover.hidden) return;
+      setUnderlayPopover(false);
+      event.stopPropagation();
+    });
     dom.underlayFile.addEventListener('change', (event) => {
       const file = event.target.files && event.target.files[0];
       event.target.value = '';

@@ -358,28 +358,43 @@ test('subtract leaves the result in the base layer slot', async ({ page }) => {
   expect(shapes[2].id).toBe('y');
 });
 
-test('the assist panel drives grid visibility, size and snapping', async ({ page }) => {
+test('[SVG-028] assist controls live in the stage toolbar', async ({ page }) => {
+  await load(page, [rect('a', 10, 10, 20, 20)]);
+  await expect(page.locator('.breadcrumb')).toHaveCount(0);
+  await expect(page.locator('#leftRail .rail-btn')).toHaveCount(2);
+  await expect(page.locator('#leftPanelGuides')).toHaveCount(0);
+  await expect(page.locator('#gridToggle')).toBeVisible();
+  await expect(page.locator('#gridSize')).toBeVisible();
+  await expect(page.locator('#snapToggle')).toBeVisible();
+  await expect(page.locator('#underlayToggle')).toBeVisible();
+});
+
+test('[SVG-029] the stage toolbar drives grid visibility, size and snapping', async ({ page }) => {
   await load(page, [rect('a', 10, 10, 20, 20)]);
   let info = await page.evaluate(() => window.__ALBEDO_TEST__.snapInfo());
   expect(info.grid.visible).toBe(false);
   expect(info.enabled).toBe(true);
+  await expect(page.locator('#gridToggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#snapToggle')).toHaveAttribute('aria-pressed', 'true');
 
-  await leftTab(page, 'guides');
-  await page.locator('#gridToggle').check();
+  await page.locator('#gridToggle').click();
   await page.locator('#gridSize').selectOption('16');
   info = await page.evaluate(() => window.__ALBEDO_TEST__.snapInfo());
   expect(info.grid).toEqual({ visible: true, size: 16 });
+  await expect(page.locator('#gridToggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#gridLayer rect')).toHaveCount(1);
   await expect(page.locator('#stageDefs pattern')).toHaveCount(1);
 
-  await page.locator('#snapToggle').uncheck();
+  await page.locator('#snapToggle').click();
   info = await page.evaluate(() => window.__ALBEDO_TEST__.snapInfo());
   expect(info.enabled).toBe(false);
+  await expect(page.locator('#snapToggle')).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('the guides tab contains the reference underlay controls', async ({ page }) => {
+test('[SVG-030] the reference button opens the underlay popover', async ({ page }) => {
   await load(page, [rect('a', 10, 10, 20, 20)]);
-  await leftTab(page, 'guides');
+  await page.locator('#underlayToggle').click();
+  await expect(page.locator('#underlayPopover')).toBeVisible();
   await expect(page.locator('#underlayImportBtn')).toBeVisible();
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
@@ -394,8 +409,11 @@ test('the guides tab contains the reference underlay controls', async ({ page })
   await expect(page.locator('#underlayControls')).toBeVisible();
   await expect(page.locator('#underlayName')).toHaveText('trace.svg');
   await expect(page.locator('#underlayThumb')).toHaveAttribute('src', /^data:image\/svg\+xml/);
-  await expect(page.locator('#leftPanelGuides')).toBeVisible();
-  expect(await page.evaluate(() => window.__ALBEDO_TEST__.tabs().left)).toBe('guides');
+  await expect(page.locator('#underlayVisibleBtn')).toBeVisible();
+  await expect(page.locator('#underlayAdjustBtn')).toBeVisible();
+  await expect(page.locator('#underlayReplaceBtn')).toBeVisible();
+  await expect(page.locator('#underlayRemoveBtn')).toBeVisible();
+  await expect(page.locator('#underlayToggle')).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('side rails are tabs and only one section is shown at a time', async ({ page }) => {
@@ -405,7 +423,7 @@ test('side rails are tabs and only one section is shown at a time', async ({ pag
     rect('b', 50, 10, 20, 20, '#f26b4f')
   ]);
 
-  await expect(page.locator('#leftRail .rail-btn')).toHaveCount(3);
+  await expect(page.locator('#leftRail .rail-btn')).toHaveCount(2);
   await expect(page.locator('#leftRail [data-rail-go="insert"]')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#leftRail [data-rail-go="layers"]')).toHaveAttribute('title', 'Layers');
   await expect(page.locator('#leftRail [data-rail-go="reference"]')).toHaveCount(0);
@@ -417,18 +435,11 @@ test('side rails are tabs and only one section is shown at a time', async ({ pag
   await expect(page.locator('#leftRail [data-rail-go="layers"]')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#leftPanelLayers')).toBeVisible();
   await expect(page.locator('#leftPanelInsert')).toBeHidden();
-  await expect(page.locator('#leftPanelGuides')).toBeHidden();
+  await expect(page.locator('#leftPanelGuides')).toHaveCount(0);
   expect(await page.evaluate(() => window.__ALBEDO_TEST__.tabs().left)).toBe('layers');
-
-  await leftTab(page, 'guides');
-  await expect(page.locator('#leftPanelGuides')).toBeVisible();
-  await expect(page.locator('#leftPanelLayers')).toBeHidden();
-  await expect(page.locator('#underlayImportBtn')).toBeVisible();
-  expect(await page.evaluate(() => window.__ALBEDO_TEST__.tabs().left)).toBe('guides');
 
   await leftTab(page, 'insert');
   await expect(page.locator('#leftPanelInsert')).toBeVisible();
-  await expect(page.locator('#leftPanelGuides')).toBeHidden();
   await expect(page.locator('#leftPanelLayers')).toBeHidden();
 
   await selectAll(page);

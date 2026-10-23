@@ -46,9 +46,6 @@
           <button type="button" class="rail-btn" id="leftTabInsert" role="tab" aria-controls="leftPanelInsert" aria-selected="true" tabindex="0" data-rail-go="insert" title="Insert shape" data-i18n-title="nav.insert" aria-label="Insert shape" data-i18n-aria="nav.insert">
             <svg class="rail-icon" viewBox="0 0 128 128" width="128" height="128" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M64 28v72M28 64h72"/></svg>
           </button>
-          <button type="button" class="rail-btn" id="leftTabGuides" role="tab" aria-controls="leftPanelGuides" aria-selected="false" tabindex="-1" data-rail-go="guides" title="Guides" data-i18n-title="nav.guides" aria-label="Guides" data-i18n-aria="nav.guides">
-            <svg class="rail-icon" viewBox="0 0 128 128" width="128" height="128" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M30 30h68v68H30z"/><path d="M64 30v68M30 64h68"/></svg>
-          </button>
           <button type="button" class="rail-btn" id="leftTabLayers" role="tab" aria-controls="leftPanelLayers" aria-selected="false" tabindex="-1" data-rail-go="layers" title="Layers" data-i18n-title="nav.layers" aria-label="Layers" data-i18n-aria="nav.layers">
             <svg class="rail-icon" viewBox="0 0 128 128" width="128" height="128" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M64 20 16 44l48 24 48-24-48-24Z"/><path d="M16 64l48 24 48-24"/><path d="M16 84l48 24 48-24"/></svg>
           </button>
@@ -102,54 +99,6 @@
             <p class="tool-note" data-i18n="insert.note">Select a shape to edit. Paths use a command stack.</p>
           </section>
 
-          <section class="panel-section assist-section" id="leftPanelGuides" role="tabpanel" aria-labelledby="leftTabGuides" data-rail-section="guides" hidden>
-            <h2 class="section-title"><span class="section-label" data-i18n="assist.title">Guides</span> <span>GUIDES</span></h2>
-            <div class="assist-row">
-              <label class="assist-check"><input type="checkbox" id="gridToggle"> <span data-i18n="assist.grid">Grid</span></label>
-              <select id="gridSize" class="assist-select" data-i18n-aria="assist.gridSize" aria-label="Grid size">
-                <option value="1">1 px</option>
-                <option value="2">2 px</option>
-                <option value="4">4 px</option>
-                <option value="8" selected>8 px</option>
-                <option value="16">16 px</option>
-                <option value="32">32 px</option>
-              </select>
-            </div>
-            <div class="assist-row">
-              <label class="assist-check"><input type="checkbox" id="snapToggle" checked> <span data-i18n="assist.snap">Snap</span></label>
-              <span class="assist-hint" data-i18n="assist.altHint">Alt to bypass</span>
-            </div>
-            <p class="assist-note" data-i18n="assist.note">Snap to grid, edges, and centers.</p>
-
-            <h3 class="section-title underlay-title"><span class="section-label" data-i18n="underlay.title">Reference</span> <span>REFERENCE</span></h3>
-            <div id="underlayEmpty" class="underlay-empty">
-              <button type="button" id="underlayImportBtn" class="underlay-import" data-i18n-title="underlay.importTitle" title="Import an image as a tracing reference">
-                <span class="underlay-plus">＋</span>
-                <span>
-                  <b data-i18n="underlay.import">Import reference</b>
-                  <em data-i18n="underlay.importHint">Click to choose, or drop it on the canvas</em>
-                </span>
-              </button>
-            </div>
-            <div id="underlayControls" class="underlay-controls" hidden>
-              <div class="underlay-file">
-                <img id="underlayThumb" class="underlay-thumb" alt="">
-                <div class="underlay-file-meta">
-                  <b id="underlayName">Reference image</b>
-                  <span id="underlayMeta">0 × 0</span>
-                </div>
-                <button type="button" id="underlayRemoveBtn" class="underlay-remove" data-i18n-title="underlay.remove" data-i18n-aria="underlay.remove" title="Remove reference" aria-label="Remove reference">✕</button>
-              </div>
-              <div class="underlay-row">
-                <button type="button" id="underlayVisibleBtn" class="underlay-btn" data-i18n="underlay.visible">Visible</button>
-                <button type="button" id="underlayAdjustBtn" class="underlay-btn" data-i18n="underlay.adjust">Adjust</button>
-                <button type="button" id="underlayReplaceBtn" class="underlay-btn" data-i18n="underlay.replace">Replace</button>
-              </div>
-              <p id="underlayHint" class="underlay-hint" hidden data-i18n="underlay.hint">Drag to move; drag a corner to scale proportionally.</p>
-            </div>
-            <input type="file" id="underlayFile" accept="image/*" hidden>
-          </section>
-
           <section class="panel-section grow" id="leftPanelLayers" role="tabpanel" aria-labelledby="leftTabLayers" data-rail-section="layers" hidden>
             <h2 class="section-title"><span class="section-label" data-i18n="layers.title">Layers</span> <span id="layerCount">0</span></h2>
             <div id="layers" class="layer-list" data-i18n-aria="layers.aria" aria-label="Layer list"></div>
@@ -159,7 +108,65 @@
 
       <main class="stage">
         <div class="stage-head">
-          <div class="breadcrumb"><span class="live-dot"></span><b data-i18n="canvas.label">Canvas</b><span class="slash">/</span><span id="crumbTitle">Untitled Canvas</span></div>
+          <div class="stage-guides" role="toolbar" aria-label="Guides" data-i18n-aria="assist.title">
+            <div class="guide-cluster">
+              <button type="button" id="gridToggle" class="guide-btn" aria-pressed="false" data-i18n-title="assist.gridTitle" title="Show grid">
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M2.5 2.5h11v11h-11zM6.2 2.5v11M9.8 2.5v11M2.5 6.2h11M2.5 9.8h11"/></svg>
+                <span data-i18n="assist.grid">Grid</span>
+              </button>
+              <select id="gridSize" class="guide-select" data-i18n-aria="assist.gridSize" aria-label="Grid size" title="Grid size">
+                <option value="1">1 px</option>
+                <option value="2">2 px</option>
+                <option value="4">4 px</option>
+                <option value="8" selected>8 px</option>
+                <option value="16">16 px</option>
+                <option value="32">32 px</option>
+              </select>
+            </div>
+            <button type="button" id="snapToggle" class="guide-btn is-active" aria-pressed="true" data-i18n-title="assist.snapTitle" title="Snap">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="4.5"/><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3"/></svg>
+              <span data-i18n="assist.snap">Snap</span>
+            </button>
+            <div class="guide-reference">
+              <button type="button" id="underlayToggle" class="guide-btn guide-reference-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="underlayPopover" data-i18n-title="underlay.importTitle" title="Reference">
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="7" r="1.3"/><path d="m3 12 3.6-3.4 2.4 2.2 1.7-1.6L14 12"/></svg>
+                <span data-i18n="underlay.title">Reference</span>
+                <span class="guide-state-dot" id="underlayStateDot" aria-hidden="true"></span>
+              </button>
+              <div class="underlay-popover" id="underlayPopover" role="dialog" aria-label="Reference" data-i18n-aria="underlay.title" hidden>
+                <div class="underlay-popover-head">
+                  <b data-i18n="underlay.title">Reference</b>
+                  <button type="button" id="underlayPopoverClose" class="underlay-popover-close" data-i18n-title="action.close" data-i18n-aria="action.close" title="Close" aria-label="Close">✕</button>
+                </div>
+                <div id="underlayEmpty" class="underlay-empty">
+                  <button type="button" id="underlayImportBtn" class="underlay-import" data-i18n-title="underlay.importTitle" title="Import an image as a tracing reference">
+                    <span class="underlay-plus">＋</span>
+                    <span>
+                      <b data-i18n="underlay.import">Import reference</b>
+                      <em data-i18n="underlay.importHint">Click to choose, or drop it on the canvas</em>
+                    </span>
+                  </button>
+                </div>
+                <div id="underlayControls" class="underlay-controls" hidden>
+                  <div class="underlay-file">
+                    <img id="underlayThumb" class="underlay-thumb" alt="">
+                    <div class="underlay-file-meta">
+                      <b id="underlayName">Reference image</b>
+                      <span id="underlayMeta">0 × 0</span>
+                    </div>
+                    <button type="button" id="underlayRemoveBtn" class="underlay-remove" data-i18n-title="underlay.remove" data-i18n-aria="underlay.remove" title="Remove reference" aria-label="Remove reference">✕</button>
+                  </div>
+                  <div class="underlay-row">
+                    <button type="button" id="underlayVisibleBtn" class="underlay-btn" data-i18n="underlay.visible">Visible</button>
+                    <button type="button" id="underlayAdjustBtn" class="underlay-btn" data-i18n="underlay.adjust">Adjust</button>
+                    <button type="button" id="underlayReplaceBtn" class="underlay-btn" data-i18n="underlay.replace">Replace</button>
+                  </div>
+                  <p id="underlayHint" class="underlay-hint" hidden data-i18n="underlay.hint">Drag to move; drag a corner to scale proportionally.</p>
+                </div>
+                <input type="file" id="underlayFile" accept="image/*" hidden>
+              </div>
+            </div>
+          </div>
           <div class="stage-meta">
             <div class="zoom-controls">
               <button type="button" id="zoomOutBtn" class="zoom-btn" data-i18n-title="canvas.zoomOut" title="Zoom out">&minus;</button>
@@ -170,7 +177,7 @@
               <span id="canvasSizeLabel">960 × 640</span>
               <span class="edit-glyph" aria-hidden="true" data-i18n="action.edit">Edit</span>
             </button>
-            <span class="meta-pill">SVG 1.1</span>
+            <span class="meta-pill svg-version">SVG 1.1</span>
           </div>
         </div>
 
