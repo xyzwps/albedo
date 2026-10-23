@@ -1,83 +1,85 @@
 # Albedo
 
-Albedo 是一个在浏览器里编辑 SVG 的单文件工作台。把源码构建成 `svg-editor.html` 后，双击打开就能画图、导入已有 SVG、调整图层并导出干净的文件；不需要安装、登录或后端服务。
+**English** | [简体中文](README.zh-CN.md)
 
-## 功能
+Albedo is a single-file SVG workbench that runs in the browser. Build the source into `svg-editor.html`, then double-click it to draw, import existing SVGs, adjust layers, and export clean files — no installation, sign-in, or backend required.
 
-- **图形**：矩形、椭圆、圆、多边形、直线、路径、文字。
-- **导入 SVG**：保留元素类型、坐标、原始标记和未改动的内容，导入后作为普通图层继续编辑。
-- **编辑与排版**：选择、多选、框选、移动缩放、路径命令与节点、布尔运算、对齐与等距分布。
-- **图层与画布**：图层排序、画布尺寸、网格、吸附、参考图。
-- **文字**：使用本机字体，导出时转成轮廓，不依赖接收方是否安装了同款字体。
-- **导出**：下载 SVG 文件或复制 SVG 源码。
-- **界面语言**：简体中文 / English。
+## Features
 
-可以把它当作一个轻量的 SVG 草稿本，也可以用它整理图标、做简单的矢量拼合，再把结果导出到其他项目。
+- **Shapes**: rectangles, ellipses, circles, polygons, lines, paths, and text.
+- **SVG import**: keeps element types, coordinates, original markup, and untouched content; imported artwork becomes regular editable layers.
+- **Editing and layout**: select, multi-select, marquee, move, resize, path commands and anchors, boolean operations, align and distribute.
+- **Layers and canvas**: layer ordering, canvas size, grid, snapping, reference image.
+- **Text**: uses local fonts and converts text to outlines on export, so files do not depend on the recipient having the same fonts.
+- **Export**: download an SVG file or copy the SVG source.
+- **UI languages**: Simplified Chinese / English.
 
-## 快速开始
+You can use it as a lightweight SVG sketchpad, to organize icons, or to assemble simple vector compositions and export them into another project.
 
-### 构建后使用
+## Quick start
 
-仓库不包含构建产物。先安装依赖并构建：
+### Build and open
+
+The repository does not include the build artifact. Install dependencies and build first:
 
 ```bash
 npm install
 npm run build
 ```
 
-构建出的 `svg-editor.html` 在项目根目录，双击即可打开，也可以发给别人。**不要直接编辑它**，下一次构建会覆盖。
+The built `svg-editor.html` is in the project root. Double-click to open it, or share it with someone else. **Do not edit it directly**; the next build overwrites it.
 
-> 推荐使用 Chrome。文字图层读取本机字体需要 Chrome 的本地字体权限。
+> Chrome is recommended. Text layers use local fonts and require Chrome's local-font permission.
 
-### 常用操作
+### Common controls
 
-- 点选图形；`Shift` / `Cmd` / `Ctrl` 点选增删；在空白处拖拽框选。
-- `R` 矩形、`O` 椭圆、`C` 圆、`G` 多边形、`L` 直线、`P` 路径、`T` 文字。
-- 拖动选中的图形移动；多选时拖选择框的边或角整体缩放。
-- `Cmd/Ctrl+Z` / `Shift+Cmd/Ctrl+Z` 撤销重做，`Cmd/Ctrl+D` 复制，`Backspace` 删除。
-- 顶栏可以导入 SVG、复制源码或导出文件；画布顶栏可以开关网格、吸附和参考图。
+- Click to select; `Shift` / `Cmd` / `Ctrl`-click to add or remove; drag on empty canvas to marquee-select.
+- `R` rectangle, `O` ellipse, `C` circle, `G` polygon, `L` line, `P` path, `T` text.
+- Drag a selected shape to move it; with multiple shapes selected, drag the selection frame's edges or corners to resize the group.
+- `Cmd/Ctrl+Z` / `Shift+Cmd/Ctrl+Z` undo/redo, `Cmd/Ctrl+D` duplicate, `Backspace` delete.
+- The top bar imports SVGs, copies the source, or exports a file; the canvas toolbar toggles the grid, snapping, and reference image.
 
-## 开发
+## Development
 
-需要 Node.js 与 npm。
+Node.js and npm are required.
 
 ```bash
 npm install
 npm run dev
 ```
 
-打开 [http://127.0.0.1:4173/](http://127.0.0.1:4173/)。开发服务器监听源码目录，修改 `editor.js` 后会自动重建 bundle，刷新页面即可看到变化；生产单文件仍用 `npm run build`。
+Open [http://127.0.0.1:4173/](http://127.0.0.1:4173/). The dev server watches the source directory, rebuilds the bundle when `editor.js` changes, and picks up changes after a refresh. Use `npm run build` for the production single file.
 
-### 目录速览
+### Project layout
 
-| 路径 | 内容 |
+| Path | Contents |
 | --- | --- |
-| `index.html` | 开发入口，外部加载 CSS 与 bundle |
-| `editor.js` | 编辑器逻辑 |
-| `editor.css` | 全部界面样式 |
-| `lib/` | 路径、导入、吸附、对齐、字体、缩放等独立模块 |
-| `build.mjs` / `dev.mjs` | 单文件构建与开发服务器 |
-| `test/` | Vitest 单元测试与 Playwright E2E |
-| `docs/` | 行为册、原理记录与项目文档 |
+| `index.html` | Development entry; loads CSS and the bundle externally |
+| `editor.js` | Editor logic |
+| `editor.css` | All UI styles |
+| `lib/` | Standalone modules for paths, import, snapping, alignment, fonts, zoom, and more |
+| `build.mjs` / `dev.mjs` | Single-file build and dev server |
+| `test/` | Vitest unit tests and Playwright E2E |
+| `docs/` | Behavior specs, design notes, and project docs |
 
-模块职责、实现约束和测试细节见 [`AGENTS.md`](AGENTS.md)。
+See [`AGENTS.md`](AGENTS.md) for module responsibilities, implementation constraints, and test details.
 
-### 测试
+### Tests
 
 ```bash
 npm run test:unit   # Vitest
-npm run test:e2e    # 先构建，再用 Playwright + 本机 Chrome
-npm test            # spec:check + 单元测试 + E2E
+npm run test:e2e    # build first, then Playwright + local Chrome
+npm test            # spec check + unit tests + E2E
 ```
 
-E2E 使用系统 Chrome，不需要额外下载 Playwright 浏览器。
+E2E uses the system Chrome; no additional Playwright browser download is needed.
 
-## 文档
+## Documentation
 
-- [AGENTS.md](AGENTS.md)：协作规矩、源码地图、实现细节与测试说明。
-- [docs/specs/](docs/specs/)：用户可见行为的用例册。
-- [docs/notes/](docs/notes/)：原理、持久化细节与已知降级边界。
+- [AGENTS.md](AGENTS.md): collaboration rules, source map, implementation notes, and testing details.
+- [docs/specs/](docs/specs/): user-visible behavior specs.
+- [docs/notes/](docs/notes/): design notes, persistence details, and known limitations.
 
-## 许可
+## License
 
-[MIT](LICENSE)。项目内打包的第三方依赖（Paper.js、opentype.js）同样使用 MIT 许可。
+[MIT](LICENSE). Bundled third-party dependencies (Paper.js and opentype.js) are also MIT-licensed.
