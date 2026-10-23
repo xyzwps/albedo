@@ -30,6 +30,7 @@ import {
   const MAX_HISTORY = 70;
   const TAU = Math.PI * 2;
   const SNAP_PX = 6;
+  const STAGE_GUTTER = 64;
   const GRID_SIZES = [1, 2, 4, 8, 16, 32];
   const BOOLEAN_META = {
     unite: { labelKey: 'boolean.unite', titleKey: 'boolean.uniteTitle' },
@@ -1631,8 +1632,8 @@ import {
 
   function fitArtboard(anchor) {
     if (!state.doc || !dom.stageBody || !dom.artboardWrap) return;
-    const availW = Math.max(1, dom.stageBody.clientWidth - 68);
-    const availH = Math.max(1, dom.stageBody.clientHeight - 52);
+    const availW = Math.max(1, dom.stageBody.clientWidth - STAGE_GUTTER * 2);
+    const availH = Math.max(1, dom.stageBody.clientHeight - STAGE_GUTTER * 2);
     const ratio = state.doc.width / state.doc.height;
     let displayW = Math.min(availW, 980);
     let displayH = displayW / ratio;
@@ -4441,7 +4442,7 @@ import {
     state.sourceByDoc.set(before, previousSource);
     state.sourceByDoc.set(snapshot(), state.source);
     state.sourcePersisted = false;
-    applySelection(shapes.map((shape) => shape.id));
+    applySelection([]);
     state.pathEdit = false;
     state.rightTab = 'style';
     pushHistory(before);

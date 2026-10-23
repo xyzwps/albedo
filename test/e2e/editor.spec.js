@@ -479,7 +479,7 @@ test('importing an SVG adds editable vector shapes', async ({ page }) => {
   expect(shapes.map((shape) => shape.name)).toEqual(['mark 1', 'mark 2']);
   expect(shapes.find((shape) => shape.fill === '#123456' || shape.stroke === '#123456')).toBeTruthy();
   expect(shapes.every((shape) => shape.opacity === 0.8)).toBe(true);
-  expect((await selection(page)).sort()).toEqual(shapes.map((shape) => shape.id).sort());
+  expect(await selection(page)).toEqual([]);
   await expect(page.locator('#toast')).toContainText('Imported 2 shapes');
 
   const bounds = await page.evaluate(() => window.__ALBEDO_TEST__.doc().shapes.map((shape) => {
@@ -1118,6 +1118,37 @@ test('zooming past fit makes the stage scrollable for panning', async ({ page })
   });
   expect(scrolled.x).toBeGreaterThan(0);
   expect(scrolled.y).toBeGreaterThan(0);
+});
+
+test('[SVG-032] a zoomed canvas keeps a gutter on every edge', async ({ page }) => {
+  await load(page, []);
+  await page.locator('#zoomInBtn').click();
+  await page.locator('#zoomInBtn').click();
+  await page.locator('#zoomInBtn').click();
+  await expect(page.locator('#zoomLabel')).toHaveText('200%');
+
+  const gaps = (corner) => page.evaluate((where) => {
+    const body = document.querySelector('.stage-body');
+    if (where === 'start') {
+      body.scrollLeft = 0;
+      body.scrollTop = 0;
+    } else {
+      body.scrollLeft = body.scrollWidth;
+      body.scrollTop = body.scrollHeight;
+    }
+    const frame = body.getBoundingClientRect();
+    const art = document.querySelector('#artboardWrap').getBoundingClientRect();
+    return where === 'start'
+      ? { left: art.left - frame.left, top: art.top - frame.top }
+      : { right: frame.right - art.right, bottom: frame.bottom - art.bottom };
+  }, corner);
+
+  const start = await gaps('start');
+  expect(start.left).toBeGreaterThanOrEqual(32);
+  expect(start.top).toBeGreaterThanOrEqual(32);
+  const end = await gaps('end');
+  expect(end.right).toBeGreaterThanOrEqual(32);
+  expect(end.bottom).toBeGreaterThanOrEqual(32);
 });
 
 test('ctrl-wheel zoom keeps the document point under the cursor anchored', async ({ page }) => {

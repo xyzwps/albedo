@@ -480,3 +480,14 @@ test('[SVG-027] importing a small file does not shrink a canvas with content', a
   expect({ width: (await doc(page)).width, height: (await doc(page)).height }).toEqual({ width: 960, height: 640 });
   expect((await doc(page)).shapes[0]).toMatchObject({ id: 'existing', x: 100, y: 100, w: 200, h: 200 });
 });
+
+test('[SVG-031] importing leaves every layer unselected', async ({ page }) => {
+  await reset(page);
+  await page.locator('#leftRail [data-rail-go="layers"]').click();
+  await importSvg(page, svg(THREE_RECTS.join('')));
+  await waitForShapes(page, 3);
+
+  await expect(page.locator('#layers .layer-row')).toHaveCount(3);
+  await expect(page.locator('#layers .layer-row.selected')).toHaveCount(0);
+  await expect(page.locator('.selection-box')).toHaveCount(0);
+});

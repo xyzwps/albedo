@@ -890,6 +890,9 @@
     align-items: safe center;
     justify-content: safe center;
     overflow: auto;
+    /* Keep a grab strip around the artboard so edge handles never sit on a
+       panel seam; fitArtboard() reserves the same amount when sizing. */
+    padding: 64px;
     background-image: radial-gradient(rgba(110, 103, 89, .23) .75px, transparent .75px);
     background-size: 17px 17px;
     background-position: 8px 8px;

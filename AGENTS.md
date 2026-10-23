@@ -84,3 +84,7 @@
 
 - `svg-editor.html`、`editor.bundle.js` 是 `npm run build` 的产物，已在 `.gitignore`；不要手改，也不要提交。
 - 源文件使用 UTF-8；册子与 notes 用中文，标识符与代码片段保持原文。
+
+## 版本号
+
+- 项目采用 `major.minor.patch` 版本号的形式。每次提交，patch 版本号要自动 +1。major 和 minor 由人来决定是否增加。
