@@ -312,6 +312,9 @@
     padding: 11px;
     transition: .16s ease;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
   }
   .shape-btn:hover {
     border-color: #c8c0b2;
@@ -733,8 +736,10 @@
     white-space: nowrap;
     cursor: pointer;
     transition: border-color .14s ease, background .14s ease, color .14s ease;
+    display: inline-flex;
+    align-items: center;
   }
-  .guide-btn svg { width: 12px; height: 12px; flex: 0 0 auto; }
+  .guide-btn svg { width: 14px; height: 14px; flex: 0 0 auto; }
   .guide-btn:hover { border-color: #bcb2a2; background: #fffefa; color: #3f433f; }
   .guide-btn.is-active { border-color: #aacdbf; background: #eef7f2; color: #2d7a5f; }
   .guide-btn.is-off { opacity: .62; }
