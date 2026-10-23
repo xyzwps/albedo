@@ -3,7 +3,7 @@
 单文件浏览器 SVG 编辑器：`editor.js` + `lib/` 是源码，`build.mjs` 把 CSS/JS 内联成
 `svg-editor.html`。三份东西必须一起动：**用例册** `docs/specs/`（用户可见契约，给人 review）
 · **可执行影子** `test/`（给机器跑）· **踩坑记录** `docs/notes/`（动对应模块前先扫）。
-`README.md` 讲产品，本文件讲规矩，`docs/notes/` 讲为什么。
+`README.md` 讲产品与上手，本文件讲协作规矩、源码地图与实现约束，`docs/notes/` 讲为什么。
 
 ## Git 纪律（最高优先，压过一切便利）
 
@@ -28,6 +28,58 @@
 
 单跑一条测试：`npx playwright test test/e2e/svg-roundtrip.spec.js -g "SVG-001"`。
 单跑一条 Vitest：`npx vitest run test/svg-path.test.js`。
+
+## 源码地图
+
+- `index.html` — 开发入口，外部加载 `editor.css` / `editor.bundle.js`。
+- `editor.css` — 全部样式（界面、画布、选择框、网格、桌布、响应式布局）。
+- `editor.js` — 编辑器逻辑，内部按 section 注释分块：文档模型、历史、几何、渲染、检查器、图层、手势、导出、桌布、事件、启动。
+- `lib/i18n.js` — 简体中文 / English 文案、语言检测、复数与插值。
+- `lib/path.js` — 路径/图元到 SVG `d` 的序列化。
+- `lib/boolean.js` — 基于 Paper.js 的曲线布尔运算（并集/差集/交集/排除）。
+- `lib/svg-import.js` — 用 Paper.js 解析导入的 SVG，把路径、变换与继承样式转成可编辑图形；变换可表达时 `rect`/`circle`/`ellipse`/`line`/`polygon` 保持原生图元类型，路径中的 `A` 圆弧会尽量保留。导入同时保留一份规范化源模板，导出时未改动的元素原样写回；改动图形时，未变的填充/描边、虚线、渐变引用等绘制属性也会尽量沿用源元素。
+- `lib/svg-path.js` — SVG 路径数据解析、变换矩阵、仿射矩阵求逆与椭圆弧仿射变换（导入时用来保留 `A` 命令），以及 `rect`/`circle`/`ellipse` 经仿射矩阵后的图元几何换算。图标库仓库 `~/develop/logo-icon` 的 bake 工具留着这份文件逐字一致的另一份拷贝（两边各自 `test/svg-path.test.js`）；改了这里要记得同步过去，反过来也一样。
+- `lib/snap.js` — 网格、图形边缘/中心、路径节点的吸附数学。
+- `lib/align.js` — 对齐与等距分布数学。
+- `lib/zoom.js` — 画布缩放：档位表、范围钳制、滚轮因子与保持锚点不动的滚动换算。
+- `lib/sfnt.js` — 字体文件字节手术：把 `ttcf` 集合里的每个字面重建成独立 sfnt（表偏移是绝对地址，必须重排表目录），并丢掉 opentype.js 读不了的 cmap 子表记录。
+- `lib/text-outline.js` — 文字图层的度量与轮廓：解析本机字体文件、算文本框/基线，把 opentype.js 的字形路径映射成编辑器的 `M`/`L`/`Q`/`C`/`Z` 命令栈。
+- `lib/recent-fonts.js` — 字体弹窗的「最近使用」：LRU 列表读写（注入 Web Storage，读写都容错）与置顶排序。
+- `build.mjs` — 用 esbuild 打包 `editor.js`（含 Paper.js），再把 CSS 和 bundle 内联回本目录的 `svg-editor.html`。
+- `dev.mjs` — 开发服务器，修改 `editor.js` 时自动重建 bundle。
+
+## 实现细节
+
+### 文字图层
+
+- 字体来自本机：检查器的「选择字体」调用 Chrome Font Access API（`queryLocalFonts()`），弹窗可搜索并按家族/风格排序列出本机字体，一次最多渲染 240 条。选中后编辑器读出该字体文件，注册成 `FontFace` 用于显示，同时用 opentype.js 解析同一份字节用于轮廓——屏幕上看到的就是导出得到的。
+- 这一步依赖 Chrome 的 `local-fonts` 权限：权限没给时 Chrome 不报错，而是回一个空列表。拿到空列表时弹窗不会只剩空白，会明确写出「权限没给」、给出重试按钮，并提示改用 `npm run dev` 打开 `http://127.0.0.1:4173`；导出同样会拒绝并提示，而不是悄悄掉字。
+- 浏览器不支持该 API（非 Chrome）时直接提示改用 Chrome，不做字体文件手选兜底——字体清单始终以本机为准，缺字体时宁可拒绝导出也不近似。
+- macOS 系统字体大多是 `ttcf` 集合，opentype.js 只吃独立 sfnt，所以 `lib/sfnt.js` 会先把字面重建成单独的文件；少数老 cmap 子表（如 platform 0 的 format 6）解析器直接拒绝，就把这条记录摘掉，其余子表原样保留。
+- 最近用的字体排在前面：每次选定字体，就把它的 PostScript 名记进 `localStorage` 的 `albedo-svg-studio:recent-fonts:v1`（LRU，最多 8 条），下次打开弹窗顶部先出现「最近使用」分组，其余仍按家族/风格字母序；搜索时不显示分组，但命中的最近字体同样置顶。本机已删除的字体名会被忽略，存储读不到或写不进去也只是没有置顶。排序逻辑在 `lib/recent-fonts.js`，是纯函数，单测直接覆盖。
+- 还没选过字体的文字图层用粗略的逐字估算撑住选择框（中日韩整字宽按字号、其余按 0.55 倍字号），选上字之后按真实字形度量。
+- 导出（下载或复制 SVG）时文字一律转成路径轮廓：一个文字块输出成 `<g>` 包着的 `<path>`，不会留下 `<text>`、`font-family` 之类依赖字体的东西。找不到对应字体时导出会拒绝并提示；文字图层不参与布尔运算。
+
+### 画布与导出
+
+- 画布只是显示区域：导出时它体现为根元素的 `width` / `height` / `viewBox`，不会落成任何图形元素；检查器里的「背景」同样是视图设置，不参与导出。想要底色就在画布上画一个矩形图形。
+- 导入保留源坐标：空文档、新建的空白画布或替换示例文档时画布取源尺寸；画布上已有图形时只增不减，避免小图把现有构图裁掉。
+- 导入时根节点直接子 `<title>` 会带回画布名称：当前名称仍是「未命名画布」时采用文件里的标题，已有自定义名称不被覆盖；导出时 `<title>` 始终写当前画布名称。
+- 导出优先复用导入时保存的源模板：未改动的元素按原标记写回（元素类型、属性顺序、数值文本、`id`、注释、`defs`/`style` 都保留），只有改动过的图形才按模型重新生成；重新生成时保持原生图元类型和路径的 `A` 命令，新增图形追加，删除图形移除对应源元素，层顺序变化时按文档顺序重排同一父级中的源元素。
+- 源模板随文档自动保存到 `localStorage`；撤销/重做导入时模板一起恢复。无法映射到可编辑图形的源元素（如 `text`、`image`）在未改动时原样留在文件里；整个文件没有可编辑图形时导入会拒绝。
+- 细节与已知降级边界见 [`docs/notes/svg-roundtrip.md`](docs/notes/svg-roundtrip.md)，用户可见契约见 [`docs/specs/svg-roundtrip/spec.md`](docs/specs/svg-roundtrip/spec.md)。
+
+### 多语言
+
+- 界面只提供简体中文（`zh`）和 English（`en`）；顶栏选择器有「自动 / 简体中文 / English」三档。
+- 默认自动检测：按 `navigator.languages` 的顺序取第一个受支持的语言；`zh`、`zh-Hans`、`zh-CN`、`zh-SG` 视为简体中文，`en-*` 视为英语；其他语言（包括 `zh-TW`、`zh-HK`）回退到英语。
+- 手动选择写入 `localStorage` 的 `albedo-svg-studio:lang:v1`；切回「自动」会删除该键。切换语言会重绘检查器、图层、状态栏、桌布面板和模态框，并同步 `<html lang>` 与页面标题。只翻译自动生成的默认名称，用户自定义名称保持不变。
+
+### 测试环境
+
+- E2E 使用系统 Chrome（`channel: 'chrome'`），不需要额外下载 Playwright 浏览器；默认 `en-US`，i18n 用例会模拟 `zh-CN`、`zh-TW`、`fr-FR` 等语言环境。
+- 测试通过 `window.__ALBEDO_TEST__` 载入固定文档，避免依赖自动保存的本地状态。
+- 字体用例会 `grantPermissions(['local-fonts'])` 跳过系统授权弹窗，并只在 macOS 上跑（依赖本机系统字体清单）；其中一条故意不授权，用来验证弹窗显示的是权限指引而不是空白列表。
 
 ## 四条硬规矩
 
