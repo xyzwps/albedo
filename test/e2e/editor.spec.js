@@ -1151,6 +1151,57 @@ test('[SVG-032] a zoomed canvas keeps a gutter on every edge', async ({ page }) 
   expect(end.bottom).toBeGreaterThanOrEqual(32);
 });
 
+test('[SVG-033] editor chrome text stays at readable sizes', async ({ page }) => {
+  await load(page, [rect('a', 10, 10, 30, 30)]);
+  const center = await point(page, 25, 25);
+  await page.mouse.click(center.x, center.y);
+
+  const targets = {
+    body: 'body',
+    docTitle: '.doc-title',
+    saveState: '.save-state',
+    topbarButton: '.tb-btn',
+    sectionTitle: '.section-title',
+    shapeLabel: '.shape-btn .shape-meta',
+    importHint: '.import-svg-copy em',
+    stageButton: '.guide-btn',
+    stageSelect: '.guide-select',
+    stageMeta: '.stage-meta',
+    zoomButton: '.zoom-btn',
+    canvasSize: '.canvas-size-btn',
+    stageFoot: '.stage-foot',
+    layerName: '.layer-name',
+    inspectorHeading: '.ins-section-head h2',
+    fieldLabel: '.field > label',
+    fieldInput: '.input-shell input'
+  };
+  const sizes = await page.evaluate((selectors) => {
+    const out = {};
+    for (const [name, selector] of Object.entries(selectors)) {
+      const el = document.querySelector(selector);
+      out[name] = el ? parseFloat(getComputedStyle(el).fontSize) : null;
+    }
+    return out;
+  }, targets);
+
+  const tooSmall = Object.entries(sizes).filter(([name, size]) =>
+    name === 'body' || name === 'fieldInput' ? !(size >= 14) : !(size >= 11)
+  );
+  expect(tooSmall).toEqual([]);
+});
+
+test('[SVG-034] the topbar brand uses the Albedo SVG mark', async ({ page }) => {
+  const mark = page.locator('.brand-mark');
+  await expect(mark.locator('svg')).toHaveCount(1);
+
+  const colors = await mark.locator('svg').evaluate((svg) => ({
+    fills: Array.from(svg.querySelectorAll('[fill]')).map((node) => node.getAttribute('fill')),
+    ellipses: svg.querySelectorAll('ellipse').length
+  }));
+  expect(colors.fills).toEqual(['#f2c75c', '#f26b4f', '#98a6e8']);
+  expect(colors.ellipses).toBe(1);
+});
+
 test('ctrl-wheel zoom keeps the document point under the cursor anchored', async ({ page }) => {
   await load(page, [rect('a', 10, 10, 30, 30)]);
   const docAt = (x, y) => page.evaluate(([px, py]) => {
